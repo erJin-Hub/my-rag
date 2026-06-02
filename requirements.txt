@@ -1,0 +1,11 @@
+﻿# API 调用
+httpx>=0.28
+PyJWT>=2.13
+
+# 向量计算
+numpy>=2.4
+faiss-cpu>=1.14
+
+# LangChain（Document、文本切分）
+langchain-core>=1.4
+langchain-text-splitters>=1.1

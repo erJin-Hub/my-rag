@@ -1,0 +1,19 @@
+# PyCharm 配置
+.idea/
+*.iml
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 数据文件
+*.db
+*.json
+faiss.index
+conversations.db
+documents.json
+
+# 本地环境
+.env
+.venv
+venv
