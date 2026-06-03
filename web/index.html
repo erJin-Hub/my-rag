@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>my-rag Chat</title>
+    <link rel="stylesheet" href="/static/styles.css?v=20260603-5">
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-title">my-rag</div>
+          <div class="brand-subtitle">RAG Chat</div>
+        </div>
+
+        <button id="newChatButton" class="primary-button" type="button">新对话</button>
+
+        <div class="join-row">
+          <input id="conversationInput" type="text" inputmode="text" placeholder="粘贴会话ID">
+          <button id="openChatButton" type="button">打开</button>
+        </div>
+
+        <div class="section-title">本地会话</div>
+        <div id="conversationList" class="conversation-list"></div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <div id="currentTitle" class="page-title">新对话</div>
+            <div id="currentMeta" class="page-meta">还没有选择会话</div>
+          </div>
+          <button id="reloadHistoryButton" class="ghost-button" type="button">刷新历史</button>
+        </header>
+
+        <section id="messages" class="messages" aria-live="polite"></section>
+
+        <footer class="composer">
+          <div id="sources" class="sources"></div>
+          <form id="chatForm" class="chat-form">
+            <textarea id="queryInput" rows="2" placeholder="输入你的问题"></textarea>
+            <button id="sendButton" class="send-button" type="submit">发送</button>
+          </form>
+        </footer>
+      </main>
+    </div>
+
+    <script src="/static/app.js?v=20260603-5"></script>
+  </body>
+</html>

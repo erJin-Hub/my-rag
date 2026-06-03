@@ -13,5 +13,5 @@ BAILIAN_RERANK_URL = "https://dashscope.aliyuncs.com/compatible-api/v1/reranks"
 MYSQL_HOST = "localhost"
 MYSQL_PORT = 3306
 MYSQL_USER = "root"
-MYSQL_PASSWORD = "root"
+MYSQL_PASSWORD = "123456"
 MYSQL_DATABASE = "my_rag"
