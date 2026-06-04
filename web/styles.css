@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --bg: #f6f7f9;
   --panel: #ffffff;
   --line: #d9dee7;
@@ -295,3 +295,10 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+
+.upload-area { margin: 8px 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.upload-label { font-size: 12px; color: var(--text-muted, #666); cursor: pointer; }
+.upload-status { font-size: 11px; color: var(--text-muted, #999); }
+.doc-list { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+.doc-item { font-size: 11px; background: var(--bg, #f0f0f0); padding: 2px 8px; border-radius: 10px; }
