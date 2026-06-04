@@ -1,7 +1,12 @@
-﻿"""
+"""
 第1步：最简单的 RAG — 内存文档 + FAISS 检索 + LLM 回答
 Embedding 使用智谱 embedding-2 API（无需本地模型）
 """
+try:
+    from steps._bootstrap import DATA_DIR, DOCS_DIR
+except ModuleNotFoundError:
+    from _bootstrap import DATA_DIR, DOCS_DIR
+
 import httpx
 import jwt
 import time

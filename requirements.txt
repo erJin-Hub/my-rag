@@ -25,6 +25,7 @@ langchain-core==1.4.0
 langchain-protocol==0.0.16
 langchain-text-splitters==1.1.2
 langsmith==0.8.7
+lxml==6.1.1
 markdown-it-py==4.2.0
 MarkupSafe==3.0.3
 mdurl==0.1.2
@@ -39,6 +40,8 @@ pydantic==2.13.4
 Pygments==2.20.0
 PyJWT==2.13.0
 PyMySQL==1.2.0
+pypdf==6.12.2
+python-docx==1.2.0
 PyYAML==6.0.3
 regex==2026.5.9
 requests==2.34.2
@@ -48,6 +51,8 @@ scikit-learn==1.8.0
 scipy==1.17.1
 setuptools==81.0.0
 shellingham==1.5.4
+greenlet==3.5.1
+SQLAlchemy==2.0.50
 sse-starlette==3.4.4
 starlette==1.2.1
 sympy==1.14.0

@@ -1,4 +1,4 @@
-﻿"""
+"""
 第6步：Reranker 重排序（阿里云百炼 gte-rerank 在线 API）
 基于 step5，在 FAISS 粗排之后加入在线 Rerank API 精排：
   - FAISS 先捞 top-10 候选（粗排，速度快）
@@ -7,6 +7,11 @@
 
 零额外依赖：百炼 API 只需 httpx，已安装。
 """
+try:
+    from steps._bootstrap import DATA_DIR, DOCS_DIR
+except ModuleNotFoundError:
+    from _bootstrap import DATA_DIR, DOCS_DIR
+
 import httpx, jwt, time, json, os, re, sys
 import numpy as np
 import faiss
@@ -46,8 +51,6 @@ def embed_texts(texts: List[str]) -> List[List[float]]:
     return embeddings
 
 # ==================== 1. 路径 ====================
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-DOCS_DIR = os.path.join(os.path.dirname(__file__), "docs")
 INDEX_PATH = os.path.join(DATA_DIR, "faiss.index")
 DOCS_PATH = os.path.join(DATA_DIR, "documents.json")
 os.makedirs(DATA_DIR, exist_ok=True)

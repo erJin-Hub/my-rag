@@ -1,4 +1,4 @@
-﻿"""
+"""
 第9步：流式输出（SSE）
 基于 step8，新增流式接口：
   - POST /api/chat         → 一次性返回（保留）
@@ -6,6 +6,11 @@
 
 原理：LLM API 设 stream=True，服务端边收边推，客户端边收边显示。
 """
+try:
+    from steps._bootstrap import DATA_DIR, DOCS_DIR
+except ModuleNotFoundError:
+    from _bootstrap import DATA_DIR, DOCS_DIR
+
 import sys, os, httpx, json, asyncio
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
@@ -22,8 +27,6 @@ from core.indexer import build_index, search
 from core.reranker import Reranker
 
 # ==================== 1. 启动时加载索引 ====================
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-DOCS_DIR = os.path.join(os.path.dirname(__file__), "docs")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 @asynccontextmanager

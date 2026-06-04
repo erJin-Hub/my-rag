@@ -8,6 +8,11 @@
   - DELETE /api/conversations/{id}       -> 删除对话
   - POST /api/chat                      -> 普通 RAG（兼容保留）
 """
+try:
+    from steps._bootstrap import DATA_DIR, DOCS_DIR
+except ModuleNotFoundError:
+    from _bootstrap import DATA_DIR, DOCS_DIR
+
 import json
 import os
 import re
@@ -41,8 +46,6 @@ from core.reranker import Reranker
 from core.splitter import load_and_split_documents
 
 # ==================== 1. 启动 ====================
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-DOCS_DIR = os.path.join(os.path.dirname(__file__), "docs")
 TITLE_MAX_CHARS = 18
 os.makedirs(DATA_DIR, exist_ok=True)
 

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>my-rag Chat</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260603-6">
+    <link rel="stylesheet" href="/static/styles.css?v=20260604-2">
   </head>
   <body>
     <div class="shell">
@@ -15,21 +15,17 @@
         </div>
 
         <button id="newChatButton" class="primary-button" type="button">新对话</button>
+        <a class="nav-button" href="/documents">知识库管理</a>
 
-        <div class="join-row">
-          <input id="conversationInput" type="text" inputmode="text" placeholder="粘贴会话ID">
-          <button id="openChatButton" type="button">打开</button>
-        </div>
+        <details class="debug-panel">
+          <summary>按会话 ID 打开</summary>
+          <div class="join-row">
+            <input id="conversationInput" type="text" inputmode="text" placeholder="粘贴会话ID">
+            <button id="openChatButton" type="button">打开</button>
+          </div>
+        </details>
 
-
-        <div class="upload-area">
-          <span class="upload-label">[上传文档]</span>
-          <input id="fileInput" type="file" accept=".txt,.md" style="display:none">
-          <button id="uploadButton" class="primary-button" type="button" style="font-size:12px;padding:4px 10px;">📄 上传 .txt/.md</button>
-          <span id="uploadStatus" class="upload-status"></span>
-        </div>
-        <div id="docList" class="doc-list"></div>
-<div class="section-title">本地会话</div>
+        <div class="section-title">本地会话</div>
         <div id="conversationList" class="conversation-list"></div>
       </aside>
 
@@ -54,6 +50,6 @@
       </main>
     </div>
 
-    <script src="/static/app.js?v=20260603-6"></script>
+    <script src="/static/app.js?v=20260604-2"></script>
   </body>
 </html>

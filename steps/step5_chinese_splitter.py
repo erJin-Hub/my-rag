@@ -1,9 +1,14 @@
-﻿"""
+"""
 第5步：中文优化切分 + 标题增强
 基于 step4，引入 hw-chat 的两大中文优化：
   - 中文分号/逗点优先的正则切分
   - 标题识别与增强（父标题->子块添加关联）
 """
+try:
+    from steps._bootstrap import DATA_DIR, DOCS_DIR
+except ModuleNotFoundError:
+    from _bootstrap import DATA_DIR, DOCS_DIR
+
 import httpx, jwt, time, json, os, re, sys
 import numpy as np
 import faiss
@@ -39,8 +44,6 @@ def embed_texts(texts: List[str]) -> List[List[float]]:
     return embeddings
 
 # ==================== 1. 路径 ====================
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-DOCS_DIR = os.path.join(os.path.dirname(__file__), "docs")
 INDEX_PATH = os.path.join(DATA_DIR, "faiss.index")
 DOCS_PATH = os.path.join(DATA_DIR, "documents.json")
 os.makedirs(DATA_DIR, exist_ok=True)

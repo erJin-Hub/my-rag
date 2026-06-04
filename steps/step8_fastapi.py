@@ -4,6 +4,11 @@
   - POST /api/chat  → 输入 query，返回 LLM 回答 + 检索到的文档
   - 启动时自动加载 FAISS 索引，整个服务生命周期复用
 """
+try:
+    from steps._bootstrap import DATA_DIR, DOCS_DIR
+except ModuleNotFoundError:
+    from _bootstrap import DATA_DIR, DOCS_DIR
+
 import sys, os, httpx
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -18,8 +23,6 @@ from core.indexer import build_index, search
 from core.reranker import Reranker
 
 # ==================== 1. 启动时加载索引 ====================
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-DOCS_DIR = os.path.join(os.path.dirname(__file__), "docs")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 @asynccontextmanager

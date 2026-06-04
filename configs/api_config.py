@@ -9,6 +9,7 @@ ZHIPU_CHAT_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
 # ---- 阿里云百炼（Rerank） ----
 BAILIAN_API_KEY = "sk-2c906e393780490cac2a76b843e6aa4d"
 BAILIAN_RERANK_URL = "https://dashscope.aliyuncs.com/compatible-api/v1/reranks"
+
 # MySQL 连接配置
 MYSQL_HOST = "localhost"
 MYSQL_PORT = 3306

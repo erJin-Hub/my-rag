@@ -1,6 +1,11 @@
-﻿"""
+"""
 第2步：FAISS 持久化 — 索引和文档存磁盘，重启不丢失
 """
+try:
+    from steps._bootstrap import DATA_DIR, DOCS_DIR
+except ModuleNotFoundError:
+    from _bootstrap import DATA_DIR, DOCS_DIR
+
 import httpx, jwt, time, json, os
 import numpy as np
 import faiss
@@ -32,7 +37,6 @@ def embed_texts(texts: List[str]) -> List[List[float]]:
     return embeddings
 
 # ==================== 1. 持久化路径 ====================
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 INDEX_PATH = os.path.join(DATA_DIR, "faiss.index")
 DOCS_PATH = os.path.join(DATA_DIR, "documents.json")
 os.makedirs(DATA_DIR, exist_ok=True)

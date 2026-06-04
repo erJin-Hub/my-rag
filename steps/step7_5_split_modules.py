@@ -1,4 +1,4 @@
-﻿"""
+"""
 第7.5步：业务逻辑拆分
 基于 step7，把主文件中的业务逻辑拆成独立模块：
   core/
@@ -9,6 +9,11 @@
 
 效果：主文件从 270 行瘦身到 80 行，只负责"组装流程"。
 """
+try:
+    from steps._bootstrap import DATA_DIR, DOCS_DIR
+except ModuleNotFoundError:
+    from _bootstrap import DATA_DIR, DOCS_DIR
+
 import httpx, sys, os
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -21,8 +26,6 @@ from core.indexer import build_index, load_index, search
 from core.reranker import Reranker
 
 # ==================== 1. 构建/加载索引 ====================
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-DOCS_DIR = os.path.join(os.path.dirname(__file__), "docs")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 index, documents = build_index(

@@ -1,4 +1,4 @@
-﻿"""
+"""
 第7步：配置系统重构
 基于 step6，把散落的配置提取到 configs/ 包中：
   - api_config.py : 所有 API Key 和 URL
@@ -8,6 +8,11 @@
 改动：不删功能、不改逻辑，只把配置变量移到独立文件。
 好处：改参数不用翻主逻辑、Key 和代码分离更安全。
 """
+try:
+    from steps._bootstrap import DATA_DIR, DOCS_DIR
+except ModuleNotFoundError:
+    from _bootstrap import DATA_DIR, DOCS_DIR
+
 import httpx, jwt, time, json, os, re, sys
 import numpy as np
 import faiss
@@ -47,8 +52,6 @@ def embed_texts(texts: List[str]) -> List[List[float]]:
     return embeddings
 
 # ==================== 1. 路径 ====================
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-DOCS_DIR = os.path.join(os.path.dirname(__file__), "docs")
 INDEX_PATH = os.path.join(DATA_DIR, "faiss.index")
 DOCS_PATH = os.path.join(DATA_DIR, "documents.json")
 os.makedirs(DATA_DIR, exist_ok=True)

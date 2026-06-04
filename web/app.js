@@ -8,10 +8,6 @@ const state = {
 const TITLE_MAX_CHARS = 18;
 
 const els = {
-  docList: document.querySelector("#docList"),
-  fileInput: document.querySelector("#fileInput"),
-  uploadButton: document.querySelector("#uploadButton"),
-  uploadStatus: document.querySelector("#uploadStatus"),
   newChatButton: document.querySelector("#newChatButton"),
   openChatButton: document.querySelector("#openChatButton"),
   reloadHistoryButton: document.querySelector("#reloadHistoryButton"),
@@ -489,43 +485,3 @@ function appendMessage(role, text) {
 function scrollMessagesToBottom() {
   els.messages.scrollTop = els.messages.scrollHeight;
 }
-
-
-// ---- 文档上传 ----
-(function () {
-  const { fileInput, uploadButton: uploadBtn, uploadStatus, docList } = els;
-  if (!docList || !fileInput || !uploadBtn) return;
-
-  uploadBtn.addEventListener("click", () => fileInput.click());
-  fileInput.addEventListener("change", async () => {
-    const file = fileInput.files[0];
-    if (!file) return;
-    uploadBtn.disabled = true;
-    uploadStatus.textContent = "上传中...";
-    const form = new FormData();
-    form.append("file", file);
-    try {
-      const resp = await fetch("/api/documents/upload", { method: "POST", body: form });
-      const data = await resp.json();
-      uploadStatus.textContent = "[" + data.chunks + "块] OK";
-      fileInput.value = "";
-      refreshDocList();
-    } catch (e) {
-      uploadStatus.textContent = "失败";
-    } finally {
-      uploadBtn.disabled = false;
-    }
-  });
-
-  async function refreshDocList() {
-    try {
-      const resp = await fetch("/api/documents/list");
-      const data = await resp.json();
-      docList.innerHTML = (data.files || []).map(f => '<span class="doc-item">' + f.filename + ' (' + f.chunks + ')</span>').join("");
-    } catch (e) {
-      docList.textContent = "";
-    }
-  }
-
-  refreshDocList();
-})();

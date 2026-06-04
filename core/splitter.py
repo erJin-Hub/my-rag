@@ -5,6 +5,7 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pathlib import Path
 from configs import CHUNK_SIZE, CHUNK_OVERLAP, ZH_TITLE_ENHANCE
+from core.document_loader import SUPPORTED_SUFFIXES, extract_text_from_path
 
 # ---- 切分器底层工具 ----
 def _split_text_with_regex_from_end(text: str, separator: str, keep_separator: bool) -> List[str]:
@@ -109,22 +110,27 @@ def zh_title_enhance(docs: List[Document]) -> List[Document]:
 
 # ---- 统一入口 ----
 def load_and_split_documents(folder: str) -> List[Document]:
-    """从文件夹加载所有 .md/.txt，切分并可选标题增强，返回 Document 列表"""
+    """从文件夹加载支持的文档，切分并可选标题增强，返回 Document 列表"""
     text_splitter = ChineseRecursiveTextSplitter(
         keep_separator=True, is_separator_regex=True,
         chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP,
     )
     all_chunks = []
     for file_path in Path(folder).iterdir():
-        if file_path.is_file() and file_path.suffix in {".txt", ".md"}:
-            content = file_path.read_text(encoding="utf-8-sig")
-            doc = Document(page_content=content, metadata={"source": file_path.name})
-            chunks = text_splitter.split_documents([doc])
-            if ZH_TITLE_ENHANCE:
-                chunks = zh_title_enhance(chunks)
-            for i, chunk in enumerate(chunks):
-                chunk.metadata["chunk"] = i
-                chunk.metadata["source"] = file_path.name
-            all_chunks.extend(chunks)
-            print(f"  [LOAD] {file_path.name} ({len(content)} 字) → 切成 {len(chunks)} 块")
+        if not file_path.is_file() or file_path.suffix.lower() not in SUPPORTED_SUFFIXES:
+            continue
+        try:
+            content = extract_text_from_path(file_path)
+        except Exception as exc:
+            print(f"  [SKIP] {file_path.name} 读取失败：{exc}")
+            continue
+        doc = Document(page_content=content, metadata={"source": file_path.name})
+        chunks = text_splitter.split_documents([doc])
+        if ZH_TITLE_ENHANCE:
+            chunks = zh_title_enhance(chunks)
+        for i, chunk in enumerate(chunks):
+            chunk.metadata["chunk"] = i
+            chunk.metadata["source"] = file_path.name
+        all_chunks.extend(chunks)
+        print(f"  [LOAD] {file_path.name} ({len(content)} 字) → 切成 {len(chunks)} 块")
     return all_chunks
