@@ -11,14 +11,21 @@ def build_rag_system_prompt(context: str) -> str:
 </已知信息>"""
 
 
-def build_memory_system_prompt(context: str) -> str:
+def build_memory_system_prompt(context: str, long_term_memory: str = "") -> str:
+    memory_block = long_term_memory.strip() or "暂无长期记忆。"
     return f"""{build_rag_system_prompt(context)}
+
+<长期记忆>
+{memory_block}
+</长期记忆>
 
 <对话记忆规则>
 1. 历史对话也是当前回答的重要依据。
 2. 如果用户说"你的名字叫X""以后叫你X"，表示用户正在给助手设置称呼；后续用户问"你叫什么名字"时，应根据历史回答"我叫X"。
 3. 如果用户说"我的名字叫X"，表示用户在告诉你用户自己的名字；不要和助手名字混淆。
 4. 对当前会话中已经出现过的临时设定、偏好、称呼，要优先根据历史对话回答。
+5. 长期记忆记录的是跨会话仍然有用的信息，例如用户身份、偏好、项目背景和长期目标。
+6. 当长期记忆和最近对话冲突时，优先相信最近对话，并在回答中自然说明。
 </对话记忆规则>"""
 
 

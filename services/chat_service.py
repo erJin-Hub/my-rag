@@ -15,6 +15,7 @@ from core.memory import (
 )
 from prompts.conversation_prompts import build_conversation_title_prompt
 from prompts.rag_prompts import build_memory_system_prompt, build_rag_user_prompt
+from repositories.memory_repository import get_enabled_memory_text
 
 TITLE_MAX_CHARS = 18
 
@@ -91,7 +92,8 @@ async def chat_with_memory(app, query: str, conversation_id: str = "", history_l
     cid = conversation_id or await create_conversation()
     history = await get_history(cid, history_len)
     context, sources = retrieve(query, app)
-    messages = build_memory_messages(query, history, context)
+    long_term_memory = await get_enabled_memory_text()
+    messages = build_memory_messages(query, history, context, long_term_memory)
     data = {"model": LLM_MODEL, "messages": messages, "temperature": TEMPERATURE, "stream": False}
 
     with httpx.Client(timeout=60) as client:
@@ -105,8 +107,8 @@ async def chat_with_memory(app, query: str, conversation_id: str = "", history_l
     return {"answer": answer, "sources": sources, "conversation_id": cid, "title": title}
 
 
-def build_memory_messages(query: str, history: list, context: str) -> list[dict]:
-    messages = [{"role": "system", "content": build_memory_system_prompt(context)}]
+def build_memory_messages(query: str, history: list, context: str, long_term_memory: str = "") -> list[dict]:
+    messages = [{"role": "system", "content": build_memory_system_prompt(context, long_term_memory)}]
     messages += [{"role": item["role"], "content": item["content"]} for item in history]
     messages.append({"role": "user", "content": query})
     return messages
@@ -116,7 +118,8 @@ async def stream_chat_with_memory(app, query: str, conversation_id: str = "", hi
     cid = conversation_id or await create_conversation()
     history = await get_history(cid, history_len)
     context, sources = retrieve(query, app)
-    messages = build_memory_messages(query, history, context)
+    long_term_memory = await get_enabled_memory_text()
+    messages = build_memory_messages(query, history, context, long_term_memory)
     data = {"model": LLM_MODEL, "messages": messages, "temperature": TEMPERATURE, "stream": True}
 
     full_text = ""

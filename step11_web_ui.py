@@ -11,6 +11,9 @@ my-rag 完整 API —— 带前端 UI
   - DELETE /api/conversations/{id}  删除对话
   - POST /api/documents/upload      上传文档
   - GET  /api/documents/list        查看已入库文档
+  - POST /api/memories              新增长期记忆
+  - GET  /api/memories              查看长期记忆
+  - DELETE /api/memories/{id}       禁用长期记忆
   - /static/*                       前端页面
 """
 import os, sys
@@ -29,7 +32,15 @@ from core.indexer import build_index
 from core.reranker import Reranker
 from core.splitter import load_and_split_documents
 from core.memory import init_pool, close_pool
-from schemas.chat import ChatRequest, MemoryChatRequest, ChatResponse, NewConvResponse, UploadResponse
+from schemas.chat import (
+    ChatRequest,
+    MemoryChatRequest,
+    ChatResponse,
+    MemoryCreateRequest,
+    MemoryResponse,
+    NewConvResponse,
+    UploadResponse,
+)
 from services.chat_service import chat_once, chat_with_memory, stream_chat_with_memory
 from services.conversation_service import (
     create_new_conversation,
@@ -38,6 +49,11 @@ from services.conversation_service import (
     remove_conversation_by_id,
 )
 from services.document_service import list_knowledge_documents, upload_document_to_knowledge_base
+from services.memory_service import (
+    add_long_term_memory,
+    get_long_term_memories,
+    remove_long_term_memory,
+)
 
 # ==================== 1. 启动 ====================
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
@@ -102,26 +118,47 @@ async def conversation_history(conversation_id: str):
 async def remove_conversation(conversation_id: str):
     return await remove_conversation_by_id(conversation_id)
 
-# ==================== 5. 带记忆的非流式 ====================
+# ==================== 5. 长期记忆管理 ====================
+@app.post("/api/memories", response_model=MemoryResponse)
+async def create_memory(request: MemoryCreateRequest):
+    return MemoryResponse(**await add_long_term_memory(
+        content=request.content,
+        category=request.category,
+        importance=request.importance,
+        source_conversation_id=request.source_conversation_id,
+    ))
+
+
+@app.get("/api/memories")
+async def memories(include_disabled: bool = False, limit: int = 20):
+    return await get_long_term_memories(include_disabled=include_disabled, limit=limit)
+
+
+@app.delete("/api/memories/{memory_id}")
+async def delete_memory(memory_id: int):
+    return await remove_long_term_memory(memory_id)
+
+
+# ==================== 6. 带记忆的非流式 ====================
 # @app.post("/api/chat/memory", response_model=ChatResponse)
 # async def chat_memory(request: MemoryChatRequest):
 #     result = await chat_with_memory(app, request.query, request.conversation_id, request.history_len)
 #     return ChatResponse(**result)
 
-# ==================== 6. 带记忆的流式（前端用这个） ====================
+# ==================== 7. 带记忆的流式（前端用这个） ====================
 @app.post("/api/chat/memory/stream")
 async def chat_memory_stream(request: MemoryChatRequest):
     return EventSourceResponse(
         stream_chat_with_memory(app, request.query, request.conversation_id, request.history_len)
     )
 
-# ==================== 7. 文档上传 ====================
+# ==================== 8. 文档上传 ====================
 @app.post("/api/documents/upload", response_model=UploadResponse)
 async def upload_document(file: UploadFile = File(...)):
     result = await upload_document_to_knowledge_base(app, file, DOCS_DIR, INDEX_PATH, DOCS_PATH)
     return UploadResponse(**result)
 
-# ==================== 8. 文档列表 ====================
+# ==================== 9. 文档列表 ====================
 @app.get("/api/documents/list")
 def list_documents():
     return list_knowledge_documents(app)
