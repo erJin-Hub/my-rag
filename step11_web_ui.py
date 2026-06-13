@@ -1,66 +1,28 @@
 """
 my-rag 完整 API —— 带前端 UI
-基于 step10，集成 web 前端页面 + 文档上传功能
-接口：
-  - POST /api/chat                  普通 RAG
-  - POST /api/chat/memory           带记忆的非流式对话
-  - POST /api/chat/memory/stream    带记忆的流式对话
-  - POST /api/conversations/new     创建新对话
-  - GET  /api/conversations         获取所有对话列表
-  - GET  /api/conversations/{id}/history  查看对话历史
-  - DELETE /api/conversations/{id}  删除对话
-  - POST /api/documents/upload      上传文档
-  - GET  /api/documents/list        查看已入库文档
-  - POST /api/memories              新增长期记忆
-  - GET  /api/memories              查看长期记忆
-  - DELETE /api/memories/{id}       禁用长期记忆
-  - /static/*                       前端页面
+
+主入口只负责：
+  - 初始化 FAISS 索引、Reranker、数据库连接
+  - 挂载静态前端文件
+  - 注册按功能拆分的 API Router
 """
-import os, sys
+import os
+import sys
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from sse_starlette.sse import EventSourceResponse
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-import configs
-from configs import MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE
+from configs import MYSQL_DATABASE, MYSQL_HOST, MYSQL_PASSWORD, MYSQL_PORT, MYSQL_USER
+from configs.app_paths import DATA_DIR, DOCS_DIR, WEB_DIR
 from core.indexer import build_index
+from core.memory import close_pool, init_pool
 from core.reranker import Reranker
 from core.splitter import load_and_split_documents
-from core.memory import init_pool, close_pool
-from schemas.chat import (
-    ChatRequest,
-    MemoryChatRequest,
-    ChatResponse,
-    MemoryCreateRequest,
-    MemoryResponse,
-    NewConvResponse,
-    UploadResponse,
-)
-from services.chat_service import chat_once, chat_with_memory, stream_chat_with_memory
-from services.conversation_service import (
-    create_new_conversation,
-    get_all_conversations,
-    get_conversation_history,
-    remove_conversation_by_id,
-)
-from services.document_service import list_knowledge_documents, upload_document_to_knowledge_base
-from services.memory_service import (
-    add_long_term_memory,
-    get_long_term_memories,
-    remove_long_term_memory,
-)
+from routers import chat_router, conversation_router, document_router, memory_router, page_router
 
-# ==================== 1. 启动 ====================
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-DOCS_DIR = os.path.join(os.path.dirname(__file__), "docs")
-WEB_DIR = os.path.join(os.path.dirname(__file__), "web")
-INDEX_PATH = os.path.join(DATA_DIR, "faiss.index")
-DOCS_PATH = os.path.join(DATA_DIR, "documents.json")
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(DOCS_DIR, exist_ok=True)
 
@@ -69,7 +31,9 @@ os.makedirs(DOCS_DIR, exist_ok=True)
 async def lifespan(app: FastAPI):
     print("[Server] 加载 FAISS 索引...")
     app.state.index, app.state.documents = build_index(
-        documents=load_and_split_documents(DOCS_DIR), data_dir=DATA_DIR)
+        documents=load_and_split_documents(DOCS_DIR),
+        data_dir=DATA_DIR,
+    )
     app.state.reranker = Reranker()
     await init_pool(MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE)
     print(f"[Server] 索引就绪（{app.state.index.ntotal} 个文档块）")
@@ -80,88 +44,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="my-rag", lifespan=lifespan)
 
+app.include_router(page_router.router)
+app.include_router(chat_router.router)
+app.include_router(conversation_router.router)
+app.include_router(memory_router.router)
+app.include_router(document_router.router)
 
-@app.get("/")
-async def root():
-    return RedirectResponse(url="/static/index.html")
-
-
-@app.get("/documents")
-async def documents_page():
-    return FileResponse(os.path.join(WEB_DIR, "documents.html"))
-
-
-# ==================== 2. 静态文件 ====================
 if os.path.isdir(WEB_DIR):
     app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
-    print(f"[Server] 前端已挂载: http://127.0.0.1:8000/static/index.html")
-
-# ==================== 3. 普通 RAG ====================
-@app.post("/api/chat", response_model=ChatResponse)
-def chat(request: ChatRequest):
-    return ChatResponse(**chat_once(app, request.query))
-
-# ==================== 4. 对话管理 ====================
-@app.post("/api/conversations/new", response_model=NewConvResponse)
-async def new_conversation():
-    return NewConvResponse(**await create_new_conversation())
-
-@app.get("/api/conversations")
-async def conversations():
-    return await get_all_conversations()
-
-@app.get("/api/conversations/{conversation_id}/history")
-async def conversation_history(conversation_id: str):
-    return await get_conversation_history(conversation_id)
-
-@app.delete("/api/conversations/{conversation_id}")
-async def remove_conversation(conversation_id: str):
-    return await remove_conversation_by_id(conversation_id)
-
-# ==================== 5. 长期记忆管理 ====================
-@app.post("/api/memories", response_model=MemoryResponse)
-async def create_memory(request: MemoryCreateRequest):
-    return MemoryResponse(**await add_long_term_memory(
-        content=request.content,
-        category=request.category,
-        importance=request.importance,
-        source_conversation_id=request.source_conversation_id,
-    ))
-
-
-@app.get("/api/memories")
-async def memories(include_disabled: bool = False, limit: int = 20):
-    return await get_long_term_memories(include_disabled=include_disabled, limit=limit)
-
-
-@app.delete("/api/memories/{memory_id}")
-async def delete_memory(memory_id: int):
-    return await remove_long_term_memory(memory_id)
-
-
-# ==================== 6. 带记忆的非流式 ====================
-# @app.post("/api/chat/memory", response_model=ChatResponse)
-# async def chat_memory(request: MemoryChatRequest):
-#     result = await chat_with_memory(app, request.query, request.conversation_id, request.history_len)
-#     return ChatResponse(**result)
-
-# ==================== 7. 带记忆的流式（前端用这个） ====================
-@app.post("/api/chat/memory/stream")
-async def chat_memory_stream(request: MemoryChatRequest):
-    return EventSourceResponse(
-        stream_chat_with_memory(app, request.query, request.conversation_id, request.history_len)
-    )
-
-# ==================== 8. 文档上传 ====================
-@app.post("/api/documents/upload", response_model=UploadResponse)
-async def upload_document(file: UploadFile = File(...)):
-    result = await upload_document_to_knowledge_base(app, file, DOCS_DIR, INDEX_PATH, DOCS_PATH)
-    return UploadResponse(**result)
-
-# ==================== 9. 文档列表 ====================
-@app.get("/api/documents/list")
-def list_documents():
-    return list_knowledge_documents(app)
+    print("[Server] 前端已挂载: http://127.0.0.1:8000/static/index.html")
 
 
 if __name__ == "__main__":

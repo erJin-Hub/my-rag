@@ -30,10 +30,25 @@ class UploadResponse(BaseModel):
 
 
 class MemoryCreateRequest(BaseModel):
+    # 记住什么
     content: str
+    # 这是什么类型的记忆
     category: str = "general"
+    # 有多重要
     importance: int = 3
+    # 这条记忆从哪个会话来的
     source_conversation_id: str = ""
+
+
+class MemoryUpdateRequest(BaseModel):
+    # 新的记忆内容；不传表示不修改
+    content: str | None = None
+    # 新的记忆类型；不传表示不修改
+    category: str | None = None
+    # 新的重要程度；不传表示不修改
+    importance: int | None = None
+    # 是否启用这条记忆；不传表示不修改
+    enabled: bool | None = None
 
 
 class MemoryResponse(BaseModel):

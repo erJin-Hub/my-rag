@@ -14,10 +14,13 @@ from core.memory import (
     set_conversation_title,
 )
 from prompts.conversation_prompts import build_conversation_title_prompt
+from prompts.memory_prompts import build_memory_extract_prompt
 from prompts.rag_prompts import build_memory_system_prompt, build_rag_user_prompt
-from repositories.memory_repository import get_enabled_memory_text
+from repositories.memory_repository import create_memory as save_long_term_memory
+from repositories.memory_repository import get_enabled_memory_text, memory_content_exists
 
 TITLE_MAX_CHARS = 18
+ALLOWED_MEMORY_CATEGORIES = {"profile", "preference", "project", "goal", "fact", "general"}
 
 
 def retrieve(query: str, app) -> tuple[str, list[str]]:
@@ -68,6 +71,92 @@ async def maybe_set_first_turn_title(cid: str, history: list, query: str, answer
     return title
 
 
+def parse_json_object(text: str) -> dict:
+    text = (text or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return {}
+    try:
+        return json.loads(text[start:end + 1])
+    except json.JSONDecodeError:
+        return {}
+
+
+def normalize_memory_item(item: dict) -> dict | None:
+    content = " ".join(str(item.get("content", "")).split())
+    if not content or len(content) < 6:
+        return None
+
+    category = str(item.get("category", "general")).strip().lower() or "general"
+    # 如果模型没给分类或者乱写，就默认 general
+    if category not in ALLOWED_MEMORY_CATEGORIES:
+        category = "general"
+
+    try:
+        importance = int(item.get("importance", 3))
+    except (TypeError, ValueError):
+        importance = 3
+    importance = max(1, min(importance, 5))
+
+    return {"content": content, "category": category, "importance": importance}
+
+
+async def extract_and_save_long_term_memories(query: str, answer: str, conversation_id: str) -> list[dict]:
+    prompt = build_memory_extract_prompt(query, answer)
+    data = {
+        "model": LLM_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.1,
+        "stream": False,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(ZHIPU_CHAT_URL, headers=build_auth_headers(), json=data)
+            resp.raise_for_status()
+            raw = resp.json()["choices"][0]["message"]["content"]
+    except Exception as exc:
+        print(f"[Memory] 自动提取失败: {exc}")
+        return []
+
+    # 把大模型返回的原始文本 raw，清洗一下，截取 JSON，解析成 Python dict，如果失败就返回 {}
+    payload = parse_json_object(raw)
+
+    raw_items = payload.get("memories", [])
+
+    # 如果memories不是列表，说明模型返回格式不符合要求，这次就不保存任何长期记忆，直接返回空列表
+    # 即使模型输出格式错了，也不会影响主聊天流程。
+    if not isinstance(raw_items, list):
+        return []
+
+    saved = []
+    for raw_item in raw_items[:3]:
+        if not isinstance(raw_item, dict):
+            continue
+        item = normalize_memory_item(raw_item)
+        if item is None:
+            continue
+        # 如果 memories 表里已经有完全相同的启用记忆，就跳过，不重复保存。
+        if await memory_content_exists(item["content"]):
+            continue
+        try:
+            saved.append(await save_long_term_memory(
+                content=item["content"],
+                category=item["category"],
+                importance=item["importance"],
+                source_conversation_id=conversation_id,
+            ))
+        except ValueError:
+            continue
+
+    if saved:
+        print(f"[Memory] 自动保存 {len(saved)} 条长期记忆")
+    return saved
+
+
 def build_auth_headers() -> dict:
     token = generate_token()
     return {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
@@ -104,6 +193,7 @@ async def chat_with_memory(app, query: str, conversation_id: str = "", history_l
     await save_message(cid, "user", query)
     await save_message(cid, "assistant", answer)
     title = await maybe_set_first_turn_title(cid, history, query, answer)
+    await extract_and_save_long_term_memories(query, answer, cid)
     return {"answer": answer, "sources": sources, "conversation_id": cid, "title": title}
 
 
@@ -116,8 +206,10 @@ def build_memory_messages(query: str, history: list, context: str, long_term_mem
 
 async def stream_chat_with_memory(app, query: str, conversation_id: str = "", history_len: int = 10):
     cid = conversation_id or await create_conversation()
+    # 查短期记忆
     history = await get_history(cid, history_len)
     context, sources = retrieve(query, app)
+    # 查长期记忆
     long_term_memory = await get_enabled_memory_text()
     messages = build_memory_messages(query, history, context, long_term_memory)
     data = {"model": LLM_MODEL, "messages": messages, "temperature": TEMPERATURE, "stream": True}
@@ -143,5 +235,7 @@ async def stream_chat_with_memory(app, query: str, conversation_id: str = "", hi
     await save_message(cid, "user", query)
     await save_message(cid, "assistant", full_text)
     title = await maybe_set_first_turn_title(cid, history, query, full_text)
+    # 自动提取长期记忆
+    await extract_and_save_long_term_memories(query, full_text, cid)
     done = {"sources": sources, "conversation_id": cid, "title": title}
     yield {"event": "done", "data": json.dumps(done, ensure_ascii=False)}
