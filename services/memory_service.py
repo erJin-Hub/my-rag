@@ -1,6 +1,12 @@
 from fastapi import HTTPException
 
-from repositories.memory_repository import create_memory, disable_memory, list_memories, update_memory
+from repositories.memory_repository import (
+    create_memory,
+    disable_memory,
+    list_memories,
+    sync_enabled_memory_vectors,
+    update_memory,
+)
 
 
 async def add_long_term_memory(
@@ -48,3 +54,8 @@ async def remove_long_term_memory(memory_id: int) -> dict:
     if not disabled:
         raise HTTPException(status_code=404, detail="长期记忆不存在")
     return {"id": memory_id, "enabled": False}
+
+
+async def rebuild_long_term_memory_vectors() -> dict:
+    synced, failed = await sync_enabled_memory_vectors()
+    return {"synced": synced, "failed": failed}

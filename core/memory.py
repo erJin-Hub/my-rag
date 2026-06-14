@@ -1,5 +1,6 @@
 from db.session import close_database, init_database
 from repositories.conversation_repository import (
+    count_user_messages,
     create_conversation,
     delete_conversation,
     ensure_conversation,

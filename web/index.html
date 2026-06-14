@@ -3,19 +3,23 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>my-rag Chat</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260604-2">
+    <title>my-rag 工作台</title>
+    <link rel="stylesheet" href="/static/styles.css?v=20260614-1">
   </head>
   <body>
     <div class="shell">
       <aside class="sidebar">
         <div class="brand">
           <div class="brand-title">my-rag</div>
-          <div class="brand-subtitle">RAG Chat</div>
+          <div class="brand-subtitle">retrieval memory console</div>
         </div>
 
         <button id="newChatButton" class="primary-button" type="button">新对话</button>
-        <a class="nav-button" href="/documents">知识库管理</a>
+        <nav class="side-nav" aria-label="主导航">
+          <a class="nav-button active" href="/">对话</a>
+          <a class="nav-button" href="/documents">知识库</a>
+          <a class="nav-button" href="/memories">长期记忆</a>
+        </nav>
 
         <details class="debug-panel">
           <summary>按会话 ID 打开</summary>
@@ -32,6 +36,7 @@
       <main class="main">
         <header class="topbar">
           <div>
+            <div class="kicker">CHAT RUN</div>
             <div id="currentTitle" class="page-title">新对话</div>
             <div id="currentMeta" class="page-meta">还没有选择会话</div>
           </div>
@@ -50,6 +55,6 @@
       </main>
     </div>
 
-    <script src="/static/app.js?v=20260604-2"></script>
+    <script src="/static/app.js?v=20260614-1"></script>
   </body>
 </html>

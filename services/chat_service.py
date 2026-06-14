@@ -1,12 +1,15 @@
+import asyncio
 import json
 import re
 
 import httpx
 
-from configs import SEARCH_TOP_K, ZHIPU_CHAT_URL, LLM_MODEL, TEMPERATURE
+from configs import MEMORY_VECTOR_TOP_K, SEARCH_TOP_K, ZHIPU_CHAT_URL, LLM_MODEL, TEMPERATURE
 from core.embedding import generate_token
 from core.indexer import search
+from core.memory_vector_store import search_memory_ids
 from core.memory import (
+    count_user_messages,
     create_conversation,
     get_conversation_title,
     get_history,
@@ -14,13 +17,38 @@ from core.memory import (
     set_conversation_title,
 )
 from prompts.conversation_prompts import build_conversation_title_prompt
-from prompts.memory_prompts import build_memory_extract_prompt
+from prompts.memory_prompts import (
+    build_memory_dedupe_prompt,
+    build_memory_extract_prompt,
+    build_memory_summary_extract_prompt,
+)
 from prompts.rag_prompts import build_memory_system_prompt, build_rag_user_prompt
 from repositories.memory_repository import create_memory as save_long_term_memory
-from repositories.memory_repository import get_enabled_memory_text, memory_content_exists
+from repositories.memory_repository import format_memories_text, get_enabled_memory_text, list_memories
+from repositories.memory_repository import list_memories_by_ids, memory_content_exists
+from repositories.memory_repository import update_memory as update_long_term_memory
 
 TITLE_MAX_CHARS = 18
 ALLOWED_MEMORY_CATEGORIES = {"profile", "preference", "project", "goal", "fact", "general"}
+MEMORY_SUMMARY_INTERVAL = 6
+MEMORY_SUMMARY_WINDOW = 8
+MEMORY_TRIGGER_KEYWORDS = [
+    "记住",
+    "帮我记",
+    "你要记得",
+    "以后",
+    "下次",
+    "我叫",
+    "我是",
+    "我现在是",
+    "我正在",
+    "我喜欢",
+    "我不喜欢",
+    "我希望",
+    "我的项目",
+    "我的目标",
+    "我的偏好",
+]
 
 
 def retrieve(query: str, app) -> tuple[str, list[str]]:
@@ -29,6 +57,18 @@ def retrieve(query: str, app) -> tuple[str, list[str]]:
     context = "\n".join([doc.page_content for doc in reranked])
     sources = [doc.metadata.get("source", "") for doc in reranked]
     return context, sources
+
+
+async def get_relevant_memory_text(query: str) -> str:
+    try:
+        memory_ids = await asyncio.to_thread(search_memory_ids, query, MEMORY_VECTOR_TOP_K)
+        memories = await list_memories_by_ids(memory_ids)
+        if memories:
+            return format_memories_text(memories)
+        return ""
+    except Exception as exc:
+        print(f"[Milvus] 长期记忆向量检索失败，回退到默认记忆读取: {exc}")
+        return await get_enabled_memory_text()
 
 
 def trim_title(title: str, max_chars: int = TITLE_MAX_CHARS) -> str:
@@ -105,8 +145,87 @@ def normalize_memory_item(item: dict) -> dict | None:
     return {"content": content, "category": category, "importance": importance}
 
 
-async def extract_and_save_long_term_memories(query: str, answer: str, conversation_id: str) -> list[dict]:
-    prompt = build_memory_extract_prompt(query, answer)
+def should_extract_memory_by_rule(query: str) -> bool:
+    query = query or ""
+    return any(keyword in query for keyword in MEMORY_TRIGGER_KEYWORDS)
+
+
+def should_extract_memory_by_interval(user_message_count: int) -> bool:
+    return user_message_count > 0 and user_message_count % MEMORY_SUMMARY_INTERVAL == 0
+
+
+def normalize_memory_decision(payload: dict, fallback_item: dict, existing_ids: set[int]) -> dict:
+    action = str(payload.get("action", "create")).strip().lower()
+    if action not in {"create", "ignore", "update"}:
+        action = "create"
+
+    normalized_item = normalize_memory_item({
+        "content": payload.get("content") or fallback_item["content"],
+        "category": payload.get("category") or fallback_item["category"],
+        "importance": payload.get("importance", fallback_item["importance"]),
+    })
+    if normalized_item is None:
+        normalized_item = fallback_item
+
+    memory_id = payload.get("memory_id")
+    try:
+        memory_id = int(memory_id) if memory_id is not None else None
+    except (TypeError, ValueError):
+        memory_id = None
+
+    if action == "update" and memory_id not in existing_ids:
+        action = "create"
+        memory_id = None
+    if action != "update":
+        memory_id = None
+
+    return {"action": action, "memory_id": memory_id, **normalized_item}
+
+
+async def decide_memory_save_action(item: dict) -> dict:
+    # 只和同类型记忆比较，避免“用户偏好”和“项目背景”互相误判重复。
+    existing_memories = await list_memories(
+        include_disabled=False,
+        limit=20,
+        category=item["category"],
+    )
+    if not existing_memories:
+        return {"action": "create", "memory_id": None, **item}
+
+    prompt = build_memory_dedupe_prompt(item, existing_memories)
+    data = {
+        "model": LLM_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.0,
+        "stream": False,
+    }
+    existing_ids = {memory["id"] for memory in existing_memories}
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(ZHIPU_CHAT_URL, headers=build_auth_headers(), json=data)
+            resp.raise_for_status()
+            raw = resp.json()["choices"][0]["message"]["content"]
+    except Exception as exc:
+        print(f"[Memory] 语义去重失败，按新记忆保存: {exc}")
+        return {"action": "create", "memory_id": None, **item}
+
+    payload = parse_json_object(raw)
+    return normalize_memory_decision(payload, item, existing_ids)
+
+
+def format_history_for_memory_summary(history: list[dict]) -> str:
+    lines = []
+    role_names = {"user": "用户", "assistant": "助手"}
+    for item in history:
+        role = role_names.get(item["role"], item["role"])
+        content = " ".join((item.get("content") or "").split())
+        if content:
+            lines.append(f"{role}: {content}")
+    return "\n".join(lines)
+
+
+async def extract_and_save_by_prompt(prompt: str, conversation_id: str) -> list[dict]:
     data = {
         "model": LLM_MODEL,
         "messages": [{"role": "user", "content": prompt}],
@@ -139,21 +258,73 @@ async def extract_and_save_long_term_memories(query: str, answer: str, conversat
         item = normalize_memory_item(raw_item)
         if item is None:
             continue
-        # 如果 memories 表里已经有完全相同的启用记忆，就跳过，不重复保存。
+        # 如果 mysql 的 memories 表里已经有完全相同的启用记忆，就跳过，不重复保存。
         if await memory_content_exists(item["content"]):
             continue
+        decision = await decide_memory_save_action(item)
+        if decision["action"] == "ignore":
+            continue
         try:
-            saved.append(await save_long_term_memory(
-                content=item["content"],
-                category=item["category"],
-                importance=item["importance"],
-                source_conversation_id=conversation_id,
-            ))
+            if decision["action"] == "update":
+                updated = await update_long_term_memory(
+                    memory_id=decision["memory_id"],
+                    content=decision["content"],
+                    category=decision["category"],
+                    importance=decision["importance"],
+                    enabled=True,
+                )
+                if updated:
+                    saved.append(updated)
+            else:
+                saved.append(await save_long_term_memory(
+                    content=decision["content"],
+                    category=decision["category"],
+                    importance=decision["importance"],
+                    source_conversation_id=conversation_id,
+                ))
         except ValueError:
             continue
 
     if saved:
-        print(f"[Memory] 自动保存 {len(saved)} 条长期记忆")
+        print(f"[Memory] 自动写入/更新 {len(saved)} 条长期记忆")
+    return saved
+
+
+async def extract_and_save_long_term_memories(query: str, answer: str, conversation_id: str) -> list[dict]:
+    prompt = build_memory_extract_prompt(query, answer)
+    return await extract_and_save_by_prompt(prompt, conversation_id)
+
+
+async def summarize_and_save_recent_memories(conversation_id: str) -> list[dict]:
+    # 因为一轮对话通常包含：用户消息 1 条，助手消息 1 条，所以 MEMORY_SUMMARY_WINDOW * 2
+    history = await get_history(conversation_id, MEMORY_SUMMARY_WINDOW * 2)
+    conversation_text = format_history_for_memory_summary(history)
+    if not conversation_text:
+        return []
+    prompt = build_memory_summary_extract_prompt(conversation_text)
+    return await extract_and_save_by_prompt(prompt, conversation_id)
+
+
+async def maybe_extract_and_save_long_term_memories(
+    query: str,
+    answer: str,
+    conversation_id: str,
+) -> list[dict]:
+    user_message_count = await count_user_messages(conversation_id)
+    # 规则触发（根据特定的关键词）
+    by_rule = should_extract_memory_by_rule(query)
+    # 定期总结
+    by_interval = should_extract_memory_by_interval(user_message_count)
+    if not by_rule and not by_interval:
+        return []
+
+    saved = []
+    if by_rule:
+        print("[Memory] 触发长期记忆提取：规则触发")
+        saved.extend(await extract_and_save_long_term_memories(query, answer, conversation_id))
+    if by_interval:
+        print(f"[Memory] 触发长期记忆总结：第 {user_message_count} 轮，读取最近 {MEMORY_SUMMARY_WINDOW} 轮")
+        saved.extend(await summarize_and_save_recent_memories(conversation_id))
     return saved
 
 
@@ -181,7 +352,7 @@ async def chat_with_memory(app, query: str, conversation_id: str = "", history_l
     cid = conversation_id or await create_conversation()
     history = await get_history(cid, history_len)
     context, sources = retrieve(query, app)
-    long_term_memory = await get_enabled_memory_text()
+    long_term_memory = await get_relevant_memory_text(query)
     messages = build_memory_messages(query, history, context, long_term_memory)
     data = {"model": LLM_MODEL, "messages": messages, "temperature": TEMPERATURE, "stream": False}
 
@@ -193,7 +364,7 @@ async def chat_with_memory(app, query: str, conversation_id: str = "", history_l
     await save_message(cid, "user", query)
     await save_message(cid, "assistant", answer)
     title = await maybe_set_first_turn_title(cid, history, query, answer)
-    await extract_and_save_long_term_memories(query, answer, cid)
+    await maybe_extract_and_save_long_term_memories(query, answer, cid)
     return {"answer": answer, "sources": sources, "conversation_id": cid, "title": title}
 
 
@@ -210,7 +381,7 @@ async def stream_chat_with_memory(app, query: str, conversation_id: str = "", hi
     history = await get_history(cid, history_len)
     context, sources = retrieve(query, app)
     # 查长期记忆
-    long_term_memory = await get_enabled_memory_text()
+    long_term_memory = await get_relevant_memory_text(query)
     messages = build_memory_messages(query, history, context, long_term_memory)
     data = {"model": LLM_MODEL, "messages": messages, "temperature": TEMPERATURE, "stream": True}
 
@@ -235,7 +406,7 @@ async def stream_chat_with_memory(app, query: str, conversation_id: str = "", hi
     await save_message(cid, "user", query)
     await save_message(cid, "assistant", full_text)
     title = await maybe_set_first_turn_title(cid, history, query, full_text)
-    # 自动提取长期记忆
-    await extract_and_save_long_term_memories(query, full_text, cid)
+    # 自动提取长期记忆：规则触发提取当前轮，定期触发总结最近几轮。
+    await maybe_extract_and_save_long_term_memories(query, full_text, cid)
     done = {"sources": sources, "conversation_id": cid, "title": title}
     yield {"event": "done", "data": json.dumps(done, ensure_ascii=False)}

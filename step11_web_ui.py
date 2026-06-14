@@ -21,6 +21,7 @@ from core.indexer import build_index
 from core.memory import close_pool, init_pool
 from core.reranker import Reranker
 from core.splitter import load_and_split_documents
+from repositories.memory_repository import sync_enabled_memory_vectors
 from routers import chat_router, conversation_router, document_router, memory_router, page_router
 
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -36,6 +37,11 @@ async def lifespan(app: FastAPI):
     )
     app.state.reranker = Reranker()
     await init_pool(MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE)
+    try:
+        synced, failed = await sync_enabled_memory_vectors()
+        print(f"[Milvus] 已同步长期记忆向量：成功 {synced} 条，失败 {failed} 条")
+    except Exception as exc:
+        print(f"[Milvus] 启动同步长期记忆向量失败，继续使用 MySQL 回退: {exc}")
     print(f"[Server] 索引就绪（{app.state.index.ntotal} 个文档块）")
     yield
     await close_pool()

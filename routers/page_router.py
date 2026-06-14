@@ -16,3 +16,8 @@ async def root():
 @router.get("/documents")
 async def documents_page():
     return FileResponse(os.path.join(WEB_DIR, "documents.html"))
+
+
+@router.get("/memories")
+async def memories_page():
+    return FileResponse(os.path.join(WEB_DIR, "memories.html"))

@@ -4,6 +4,7 @@ from schemas.chat import MemoryCreateRequest, MemoryResponse, MemoryUpdateReques
 from services.memory_service import (
     add_long_term_memory,
     get_long_term_memories,
+    rebuild_long_term_memory_vectors,
     remove_long_term_memory,
     update_long_term_memory,
 )
@@ -43,6 +44,11 @@ async def memories(
         limit=limit,
         category=category,
     )
+
+
+@router.post("/vector-sync")
+async def sync_memory_vectors():
+    return await rebuild_long_term_memory_vectors()
 
 
 @router.put("/{memory_id}", response_model=MemoryResponse)

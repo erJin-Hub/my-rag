@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>长期记忆 - my-rag</title>
+    <link rel="stylesheet" href="/static/styles.css?v=20260614-1">
+  </head>
+  <body>
+    <div class="documents-shell memory-page">
+      <header class="documents-topbar">
+        <div>
+          <div class="kicker">MEMORY LEDGER</div>
+          <div class="brand-title">长期记忆</div>
+          <div id="memorySummary" class="page-meta">正在读取记忆</div>
+        </div>
+        <nav class="top-nav" aria-label="主导航">
+          <a class="ghost-link" href="/">对话</a>
+          <a class="ghost-link" href="/documents">知识库</a>
+          <a class="ghost-link active" href="/memories">长期记忆</a>
+        </nav>
+      </header>
+
+      <main class="memory-main">
+        <section class="memory-editor">
+          <div class="panel-row">
+            <div>
+              <h1 class="panel-title">记忆条目</h1>
+              <div class="page-meta">保存跨会话仍然有用的偏好、项目背景和目标</div>
+            </div>
+            <button id="resetFormButton" class="ghost-button" type="button">新建</button>
+          </div>
+
+          <form id="memoryForm" class="memory-form">
+            <input id="memoryId" type="hidden">
+
+            <div class="field-block">
+              <label class="field-label" for="memoryContent">内容</label>
+              <textarea id="memoryContent" rows="5" placeholder="例如：用户是 RAG 学习新手，希望解释代码时逐行讲解。"></textarea>
+            </div>
+
+            <div class="form-grid">
+              <div class="field-block">
+                <label class="field-label" for="memoryCategory">类型</label>
+                <select id="memoryCategory">
+                  <option value="preference">preference（偏好）</option>
+                  <option value="profile">profile（用户信息）</option>
+                  <option value="project">project（项目背景）</option>
+                  <option value="goal">goal（长期目标）</option>
+                  <option value="fact">fact（事实）</option>
+                  <option value="general">general（通用）</option>
+                </select>
+              </div>
+              <div class="field-block">
+                <label class="field-label" for="memoryImportance">重要度</label>
+                <input id="memoryImportance" type="number" min="1" max="5" value="3">
+              </div>
+            </div>
+
+            <label class="memory-switch">
+              <input id="memoryEnabled" type="checkbox" checked>
+              <span class="switch-track" aria-hidden="true"></span>
+              <span>启用这条记忆</span>
+            </label>
+
+            <div class="action-row">
+              <button id="saveMemoryButton" class="primary-button compact-button" type="submit">保存记忆</button>
+              <button id="disableMemoryButton" class="ghost-button compact-button" type="button" disabled>禁用</button>
+            </div>
+            <div id="memoryStatus" class="upload-status"></div>
+          </form>
+        </section>
+
+        <section class="memory-list-panel">
+          <div class="memory-toolbar">
+            <div class="filter-row">
+              <select id="categoryFilter" aria-label="记忆类型筛选">
+                <option value="">全部类型</option>
+                <option value="preference">preference（偏好）</option>
+                <option value="profile">profile（用户信息）</option>
+                <option value="project">project（项目背景）</option>
+                <option value="goal">goal（长期目标）</option>
+                <option value="fact">fact（事实）</option>
+                <option value="general">general（通用）</option>
+              </select>
+              <label class="check-row inline-check">
+                <input id="includeDisabled" type="checkbox">
+                <span>包含禁用</span>
+              </label>
+            </div>
+            <button id="refreshMemoriesButton" class="ghost-button" type="button">刷新</button>
+          </div>
+
+          <div id="memoryList" class="memory-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/memories.js?v=20260614-1"></script>
+  </body>
+</html>

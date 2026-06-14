@@ -1,7 +1,9 @@
+import asyncio
 from datetime import datetime
 
 from sqlalchemy import select
 
+from core.memory_vector_store import delete_memory_vector, sync_memory_vectors, upsert_memory_vector
 from db.models import Memory
 from db.session import get_session_factory
 
@@ -10,6 +12,24 @@ DEFAULT_MEMORY_LIMIT = 20
 
 def normalize_memory_content(content: str) -> str:
     return " ".join((content or "").split())
+
+
+def format_datetime(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return value.strftime("%Y-%m-%d %H:%M:%S")
+
+
+async def sync_memory_vector(memory: dict) -> None:
+    try:
+        if memory.get("enabled"):
+            await asyncio.to_thread(upsert_memory_vector, memory)
+        else:
+            await asyncio.to_thread(delete_memory_vector, int(memory["id"]))
+    except Exception as exc:
+        print(f"[Milvus] 同步长期记忆向量失败 memory_id={memory.get('id')}: {exc}")
 
 
 async def create_memory(
@@ -35,7 +55,9 @@ async def create_memory(
         session.add(memory)
         await session.commit()
         await session.refresh(memory)
-        return memory_to_dict(memory)
+        result = memory_to_dict(memory)
+    await sync_memory_vector(result)
+    return result
 
 
 async def memory_content_exists(content: str) -> bool:
@@ -71,6 +93,27 @@ async def list_memories(
         return [memory_to_dict(memory) for memory in result.scalars()]
 
 
+async def list_memories_by_ids(memory_ids: list[int]) -> list[dict]:
+    if not memory_ids:
+        return []
+
+    order = {memory_id: index for index, memory_id in enumerate(memory_ids)}
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        stmt = select(Memory).where(
+            Memory.enabled.is_(True),
+            Memory.id.in_(memory_ids),
+        )
+        result = await session.execute(stmt)
+        memories = [memory_to_dict(memory) for memory in result.scalars()]
+    return sorted(memories, key=lambda memory: order.get(memory["id"], len(order)))
+
+
+async def sync_enabled_memory_vectors(limit: int = 100) -> tuple[int, int]:
+    memories = await list_memories(include_disabled=False, limit=limit)
+    return await asyncio.to_thread(sync_memory_vectors, memories)
+
+
 async def update_memory(
     memory_id: int,
     content: str | None = None,
@@ -99,11 +142,22 @@ async def update_memory(
         memory.updated_at = datetime.now()
         await session.commit()
         await session.refresh(memory)
-        return memory_to_dict(memory)
+        result = memory_to_dict(memory)
+    await sync_memory_vector(result)
+    return result
 
 
 async def get_enabled_memory_text(limit: int = DEFAULT_MEMORY_LIMIT) -> str:
     memories = await list_memories(include_disabled=False, limit=limit)
+    if not memories:
+        return ""
+    lines = []
+    for memory in memories:
+        lines.append(f"- [{memory['category']}|重要度{memory['importance']}] {memory['content']}")
+    return "\n".join(lines)
+
+
+def format_memories_text(memories: list[dict]) -> str:
     if not memories:
         return ""
     lines = []
@@ -121,7 +175,11 @@ async def disable_memory(memory_id: int) -> bool:
         memory.enabled = False
         memory.updated_at = datetime.now()
         await session.commit()
-        return True
+    try:
+        await asyncio.to_thread(delete_memory_vector, int(memory_id))
+    except Exception as exc:
+        print(f"[Milvus] 删除长期记忆向量失败 memory_id={memory_id}: {exc}")
+    return True
 
 
 def memory_to_dict(memory: Memory) -> dict:
@@ -132,6 +190,6 @@ def memory_to_dict(memory: Memory) -> dict:
         "importance": memory.importance,
         "source_conversation_id": memory.source_conversation_id,
         "enabled": memory.enabled,
-        "created_at": str(memory.created_at),
-        "updated_at": str(memory.updated_at),
+        "created_at": format_datetime(memory.created_at),
+        "updated_at": format_datetime(memory.updated_at),
     }

@@ -102,6 +102,18 @@ async def get_history(conversation_id: str, limit: int = 10) -> list[dict]:
         return [{"role": role, "content": content} for role, content in rows]
 
 
+async def count_user_messages(conversation_id: str) -> int:
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        count = await session.scalar(
+            select(func.count(Message.id)).where(
+                Message.conversation_id == conversation_id,
+                Message.role == "user",
+            )
+        )
+        return int(count or 0)
+
+
 async def list_conversations() -> list[dict]:
     session_factory = get_session_factory()
     async with session_factory() as session:

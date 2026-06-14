@@ -3,17 +3,22 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>知识库管理 - my-rag</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260604-2">
+    <title>知识库 - my-rag</title>
+    <link rel="stylesheet" href="/static/styles.css?v=20260614-1">
   </head>
   <body>
     <div class="documents-shell">
       <header class="documents-topbar">
         <div>
-          <div class="brand-title">知识库管理</div>
+          <div class="kicker">KNOWLEDGE BASE</div>
+          <div class="brand-title">知识库</div>
           <div id="docSummary" class="page-meta">正在读取文档</div>
         </div>
-        <a class="ghost-link" href="/">返回聊天</a>
+        <nav class="top-nav" aria-label="主导航">
+          <a class="ghost-link" href="/">对话</a>
+          <a class="ghost-link active" href="/documents">知识库</a>
+          <a class="ghost-link" href="/memories">长期记忆</a>
+        </nav>
       </header>
 
       <main class="documents-main">
@@ -45,6 +50,6 @@
       </main>
     </div>
 
-    <script src="/static/documents.js?v=20260604-2"></script>
+    <script src="/static/documents.js?v=20260614-1"></script>
   </body>
 </html>
