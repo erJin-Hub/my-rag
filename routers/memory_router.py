@@ -32,17 +32,28 @@ async def memories(
         "",
         description="按长期记忆类型筛选。为空表示不过滤，例如 preference、profile、project、goal、fact、general。",
     ),
+    keyword: str = Query(
+        "",
+        description="按记忆内容、类型或来源会话 ID 进行关键词搜索。为空表示不过滤。",
+    ),
     limit: int = Query(
-        20,
+        5,
         ge=1,
         le=100,
-        description="最多返回多少条长期记忆。默认 20，最大 100。",
+        description="每页返回多少条长期记忆。默认 5，最大 100。",
+    ),
+    page: int = Query(
+        1,
+        ge=1,
+        description="当前页码，从 1 开始。",
     ),
 ):
     return await get_long_term_memories(
         include_disabled=include_disabled,
         limit=limit,
         category=category,
+        keyword=keyword,
+        page=page,
     )
 
 

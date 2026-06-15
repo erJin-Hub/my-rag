@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 
 from core.memory_vector_store import delete_memory_vector, sync_memory_vectors, upsert_memory_vector
 from db.models import Memory
@@ -78,19 +78,65 @@ async def list_memories(
     include_disabled: bool = False,
     limit: int = DEFAULT_MEMORY_LIMIT,
     category: str = "",
+    keyword: str = "",
 ) -> list[dict]:
+    page_data = await list_memories_page(
+        include_disabled=include_disabled,
+        limit=limit,
+        category=category,
+        keyword=keyword,
+        page=1,
+    )
+    return page_data["items"]
+
+
+async def list_memories_page(
+    include_disabled: bool = False,
+    limit: int = DEFAULT_MEMORY_LIMIT,
+    category: str = "",
+    keyword: str = "",
+    page: int = 1,
+) -> dict:
     limit = max(1, min(int(limit or DEFAULT_MEMORY_LIMIT), 100))
+    page = max(1, int(page or 1))
     category = (category or "").strip()
+    keyword = normalize_memory_content(keyword)
     session_factory = get_session_factory()
     async with session_factory() as session:
-        stmt = select(Memory)
+        filters = []
         if not include_disabled:
-            stmt = stmt.where(Memory.enabled.is_(True))
+            filters.append(Memory.enabled.is_(True))
         if category:
-            stmt = stmt.where(Memory.category == category)
-        stmt = stmt.order_by(Memory.importance.desc(), Memory.updated_at.desc()).limit(limit)
+            filters.append(Memory.category == category)
+        if keyword:
+            pattern = f"%{keyword}%"
+            filters.append(or_(
+                Memory.content.like(pattern),
+                Memory.category.like(pattern),
+                Memory.source_conversation_id.like(pattern),
+            ))
+
+        total_stmt = select(func.count(Memory.id))
+        stmt = select(Memory)
+        if filters:
+            total_stmt = total_stmt.where(*filters)
+            stmt = stmt.where(*filters)
+
+        total = int(await session.scalar(total_stmt) or 0)
+        stmt = (
+            stmt
+            .order_by(Memory.importance.desc(), Memory.updated_at.desc())
+            .offset((page - 1) * limit)
+            .limit(limit)
+        )
         result = await session.execute(stmt)
-        return [memory_to_dict(memory) for memory in result.scalars()]
+        return {
+            "items": [memory_to_dict(memory) for memory in result.scalars()],
+            "total": total,
+            "page": page,
+            "page_size": limit,
+            "total_pages": max(1, (total + limit - 1) // limit),
+        }
 
 
 async def list_memories_by_ids(memory_ids: list[int]) -> list[dict]:

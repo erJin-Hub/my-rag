@@ -4,6 +4,7 @@ from repositories.memory_repository import (
     create_memory,
     disable_memory,
     list_memories,
+    list_memories_page,
     sync_enabled_memory_vectors,
     update_memory,
 )
@@ -25,12 +26,16 @@ async def get_long_term_memories(
     include_disabled: bool = False,
     limit: int = 20,
     category: str = "",
+    keyword: str = "",
+    page: int = 1,
 ) -> dict:
-    return {"items": await list_memories(
+    return await list_memories_page(
         include_disabled=include_disabled,
         limit=limit,
         category=category,
-    )}
+        keyword=keyword,
+        page=page,
+    )
 
 
 async def update_long_term_memory(

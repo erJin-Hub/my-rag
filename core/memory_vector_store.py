@@ -71,8 +71,12 @@ def search_memory_ids(query: str, limit: int = MEMORY_VECTOR_TOP_K) -> list[int]
     query = (query or "").strip()
     if not query:
         return []
-    ensure_memory_collection()
     query_vector = embed_one(query)
+    return search_memory_ids_by_vector(query_vector, limit)
+
+
+def search_memory_ids_by_vector(query_vector: list[float], limit: int = MEMORY_VECTOR_TOP_K) -> list[int]:
+    ensure_memory_collection()
     results = get_milvus_client().search(
         collection_name=MILVUS_MEMORY_COLLECTION,
         data=[query_vector],

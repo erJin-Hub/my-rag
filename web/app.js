@@ -103,27 +103,58 @@ function mergeConversations(primary, fallback) {
       messageCount: Number(item.messageCount || 0),
     });
   }
-  return merged;
+  return sortConversationsByUpdatedAt(merged);
 }
 
 function rememberConversation(conversationId, title) {
+  upsertConversation(conversationId, title, {
+    updatedAt: new Date().toISOString(),
+    moveToTop: true,
+  });
+}
+
+function rememberConversationSnapshot(conversationId, title) {
+  upsertConversation(conversationId, title, {
+    moveToTop: false,
+  });
+}
+
+function upsertConversation(conversationId, title, options = {}) {
   const id = String(conversationId);
   const normalizedTitle = normalizeTitle(title, id);
   const existing = state.conversations.find((item) => item.id === id);
   if (existing) {
     existing.title = normalizedTitle || existing.title;
-    existing.updatedAt = new Date().toISOString();
+    if (options.updatedAt) {
+      existing.updatedAt = options.updatedAt;
+    }
     existing.messageCount = Number(existing.messageCount || 0);
   } else {
     state.conversations.unshift({
       id,
       title: normalizedTitle || "新对话",
-      updatedAt: new Date().toISOString(),
+      updatedAt: options.updatedAt || "",
       messageCount: 0,
     });
   }
+  if (options.moveToTop !== false) {
+    state.conversations = sortConversationsByUpdatedAt(state.conversations);
+  }
   saveLocalConversations();
   renderConversationList();
+}
+
+function sortConversationsByUpdatedAt(conversations) {
+  return [...conversations].sort((a, b) => {
+    return parseConversationTime(b.updatedAt) - parseConversationTime(a.updatedAt);
+  });
+}
+
+function parseConversationTime(value) {
+  if (!value) {
+    return 0;
+  }
+  return Date.parse(String(value).replace(" ", "T")) || 0;
 }
 
 function normalizeTitle(title, conversationId) {
@@ -278,7 +309,7 @@ async function loadHistory(conversationId) {
     }
     const data = await response.json();
     const title = resolveConversationTitle(data.conversation_id, data.title);
-    rememberConversation(data.conversation_id, title);
+    rememberConversationSnapshot(data.conversation_id, title);
     setActiveConversation(data.conversation_id, title);
     renderHistory(data.messages || []);
   } catch (error) {

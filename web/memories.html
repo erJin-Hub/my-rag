@@ -25,13 +25,18 @@
         <section class="memory-editor">
           <div class="panel-row">
             <div>
-              <h1 class="panel-title">记忆条目</h1>
-              <div class="page-meta">保存跨会话仍然有用的偏好、项目背景和目标</div>
+              <h1 id="editorTitle" class="panel-title">记忆条目</h1>
+              <div id="editorSubtitle" class="page-meta">选择右侧记忆进行编辑，或新建一条长期记忆</div>
             </div>
             <button id="resetFormButton" class="ghost-button" type="button">新建</button>
           </div>
 
-          <form id="memoryForm" class="memory-form">
+          <div id="memoryEmptyState" class="editor-empty-state">
+            <div class="empty-title">还没有选择记忆</div>
+            <div class="page-meta">点击右侧记忆查看和编辑详情，或点击“新建”手动添加长期记忆。</div>
+          </div>
+
+          <form id="memoryForm" class="memory-form hidden">
             <input id="memoryId" type="hidden">
 
             <div class="field-block">
@@ -65,7 +70,6 @@
 
             <div class="action-row">
               <button id="saveMemoryButton" class="primary-button compact-button" type="submit">保存记忆</button>
-              <button id="disableMemoryButton" class="ghost-button compact-button" type="button" disabled>禁用</button>
             </div>
             <div id="memoryStatus" class="upload-status"></div>
           </form>
@@ -73,6 +77,10 @@
 
         <section class="memory-list-panel">
           <div class="memory-toolbar">
+            <div class="search-row">
+              <input id="memoryKeyword" class="filter-input" type="search" placeholder="搜索记忆内容 / 来源">
+              <button id="searchMemoriesButton" class="primary-button compact-button" type="button">搜索</button>
+            </div>
             <div class="filter-row">
               <select id="categoryFilter" aria-label="记忆类型筛选">
                 <option value="">全部类型</option>
@@ -87,11 +95,26 @@
                 <input id="includeDisabled" type="checkbox">
                 <span>包含禁用</span>
               </label>
+              <label class="page-size-control">
+                <span>每页</span>
+                <select id="pageSizeSelect" aria-label="每页条数">
+                  <option value="5" selected>5</option>
+                  <option value="10">10</option>
+                  <option value="15">15</option>
+                  <option value="20">20</option>
+                  <option value="30">30</option>
+                  <option value="50">50</option>
+                </select>
+              </label>
             </div>
-            <button id="refreshMemoriesButton" class="ghost-button" type="button">刷新</button>
           </div>
 
           <div id="memoryList" class="memory-list"></div>
+          <div class="pagination-bar">
+            <button id="prevPageButton" class="ghost-button compact-button" type="button">上一页</button>
+            <span id="paginationInfo" class="page-meta">第 1 / 1 页</span>
+            <button id="nextPageButton" class="ghost-button compact-button" type="button">下一页</button>
+          </div>
         </section>
       </main>
     </div>

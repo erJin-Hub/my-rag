@@ -60,7 +60,13 @@ def search(index: faiss.Index, documents: List[Document],
     返回排序后的 Document 列表。
     """
     query_emb = embed_texts([query])[0]
-    scores, indices = index.search(np.array([query_emb], dtype=np.float32), k=top_k)
+    return search_by_vector(index, documents, query_emb, top_k)
+
+
+def search_by_vector(index: faiss.Index, documents: List[Document],
+                     query_vector: List[float], top_k: int) -> List[Document]:
+    """使用已生成的 query 向量检索 FAISS，避免重复调用 embedding。"""
+    scores, indices = index.search(np.array([query_vector], dtype=np.float32), k=top_k)
     results = []
     for i, (score, idx) in enumerate(zip(scores[0], indices[0])):
         if idx >= 0:

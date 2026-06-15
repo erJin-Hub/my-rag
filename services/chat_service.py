@@ -5,9 +5,9 @@ import re
 import httpx
 
 from configs import MEMORY_VECTOR_TOP_K, SEARCH_TOP_K, ZHIPU_CHAT_URL, LLM_MODEL, TEMPERATURE
-from core.embedding import generate_token
-from core.indexer import search
-from core.memory_vector_store import search_memory_ids
+from core.embedding import embed_texts, generate_token
+from core.indexer import search, search_by_vector
+from core.memory_vector_store import search_memory_ids, search_memory_ids_by_vector
 from core.memory import (
     count_user_messages,
     create_conversation,
@@ -59,6 +59,14 @@ def retrieve(query: str, app) -> tuple[str, list[str]]:
     return context, sources
 
 
+def retrieve_with_vector(query: str, query_vector: list[float], app) -> tuple[str, list[str]]:
+    candidates = search_by_vector(app.state.index, app.state.documents, query_vector, top_k=SEARCH_TOP_K)
+    reranked = app.state.reranker.rerank(query, candidates)
+    context = "\n".join([doc.page_content for doc in reranked])
+    sources = [doc.metadata.get("source", "") for doc in reranked]
+    return context, sources
+
+
 async def get_relevant_memory_text(query: str) -> str:
     try:
         memory_ids = await asyncio.to_thread(search_memory_ids, query, MEMORY_VECTOR_TOP_K)
@@ -69,6 +77,23 @@ async def get_relevant_memory_text(query: str) -> str:
     except Exception as exc:
         print(f"[Milvus] 长期记忆向量检索失败，回退到默认记忆读取: {exc}")
         return await get_enabled_memory_text()
+
+
+async def get_relevant_memory_text_with_vector(query_vector: list[float]) -> str:
+    try:
+        memory_ids = await asyncio.to_thread(search_memory_ids_by_vector, query_vector, MEMORY_VECTOR_TOP_K)
+        memories = await list_memories_by_ids(memory_ids)
+        if memories:
+            return format_memories_text(memories)
+        return ""
+    except Exception as exc:
+        print(f"[Milvus] 长期记忆向量检索失败，回退到默认记忆读取: {exc}")
+        return await get_enabled_memory_text()
+
+
+async def embed_query(query: str) -> list[float]:
+    vectors = await asyncio.to_thread(embed_texts, [query])
+    return vectors[0]
 
 
 def trim_title(title: str, max_chars: int = TITLE_MAX_CHARS) -> str:
