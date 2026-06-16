@@ -19,3 +19,4 @@ SEARCH_TOP_K = 10         # FAISS 粗排捞多少个候选
 RERANK_TOP_N = 3          # 精排后保留多少个
 RERANK_MIN_SCORE = 0.35   # 低于该相关性分数的知识库文档不放进上下文，也不显示 Sources
 MEMORY_VECTOR_TOP_K = 5   # 长期记忆向量检索保留多少条
+MEMORY_MIN_SCORE = 0.3    # 低于该相似度的长期记忆不放进上下文，也不显示命中记忆

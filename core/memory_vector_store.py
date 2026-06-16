@@ -3,7 +3,7 @@ from typing import Iterable
 
 from pymilvus import MilvusClient
 
-from configs import EMBEDDING_DIM, MILVUS_MEMORY_COLLECTION, MILVUS_URI, MEMORY_VECTOR_TOP_K
+from configs import EMBEDDING_DIM, MEMORY_MIN_SCORE, MILVUS_MEMORY_COLLECTION, MILVUS_URI, MEMORY_VECTOR_TOP_K
 from core.embedding import embed_texts
 
 VECTOR_FIELD = "vector"
@@ -94,10 +94,11 @@ def search_memory_hits_by_vector(query_vector: list[float], limit: int = MEMORY_
         memory_id = hit.get("id") or hit.get("memory_id")
         entity = hit.get("entity") or {}
         memory_id = entity.get("memory_id", memory_id)
-        if memory_id is not None:
+        score = float(hit.get("distance", 0))
+        if memory_id is not None and score >= MEMORY_MIN_SCORE:
             hits.append({
                 "memory_id": int(memory_id),
-                "score": float(hit.get("distance", 0)),
+                "score": score,
             })
     return hits
 
