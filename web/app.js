@@ -17,6 +17,7 @@ const els = {
   currentMeta: document.querySelector("#currentMeta"),
   messages: document.querySelector("#messages"),
   sources: document.querySelector("#sources"),
+  usedMemories: document.querySelector("#usedMemories"),
   chatForm: document.querySelector("#chatForm"),
   queryInput: document.querySelector("#queryInput"),
   sendButton: document.querySelector("#sendButton"),
@@ -248,6 +249,7 @@ function renderEmptyState() {
   els.currentTitle.textContent = "新对话";
   els.currentMeta.textContent = "还没有选择会话";
   els.sources.textContent = "";
+  renderUsedMemories([]);
 }
 
 function setActiveConversation(conversationId, title) {
@@ -352,6 +354,7 @@ async function sendMessage(query) {
   els.sendButton.disabled = true;
   els.queryInput.value = "";
   els.sources.textContent = "";
+  renderUsedMemories([]);
 
   appendMessage("user", query);
   const assistantNode = appendMessage("assistant", "");
@@ -451,6 +454,7 @@ function handleSseEvent(rawEvent, assistantNode, query) {
       refreshConversations();
     }
     renderSources(event.data.sources || []);
+    renderUsedMemories(event.data.used_memories || []);
     return;
   }
 
@@ -502,6 +506,52 @@ function renderSources(sources) {
     pill.textContent = source;
     els.sources.appendChild(pill);
   }
+}
+
+function renderUsedMemories(memories) {
+  els.usedMemories.innerHTML = "";
+  if (!memories.length) {
+    return;
+  }
+
+  const header = document.createElement("div");
+  header.className = "used-memory-title";
+  header.textContent = `本轮命中长期记忆 ${memories.length} 条`;
+  els.usedMemories.appendChild(header);
+
+  const list = document.createElement("div");
+  list.className = "used-memory-list";
+  for (const memory of memories) {
+    const item = document.createElement("div");
+    item.className = "used-memory-item";
+
+    const meta = document.createElement("div");
+    meta.className = "used-memory-meta";
+    const score = Number(memory.score || 0);
+    meta.textContent = `#${memory.id} · ${formatMemoryCategory(memory.category)} · 重要度 ${memory.importance} · 相似度 ${score.toFixed(3)}`;
+
+    const content = document.createElement("div");
+    content.className = "used-memory-content";
+    content.textContent = memory.content || "";
+
+    item.appendChild(meta);
+    item.appendChild(content);
+    list.appendChild(item);
+  }
+  els.usedMemories.appendChild(list);
+}
+
+function formatMemoryCategory(category) {
+  const labels = {
+    preference: "偏好",
+    profile: "用户信息",
+    project: "项目背景",
+    goal: "长期目标",
+    fact: "事实",
+    general: "通用",
+  };
+  const key = String(category || "general");
+  return `${key}（${labels[key] || "未分类"}）`;
 }
 
 function appendMessage(role, text) {

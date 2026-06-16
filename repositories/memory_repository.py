@@ -155,6 +155,15 @@ async def list_memories_by_ids(memory_ids: list[int]) -> list[dict]:
     return sorted(memories, key=lambda memory: order.get(memory["id"], len(order)))
 
 
+async def list_memory_hits(memory_hits: list[dict]) -> list[dict]:
+    memory_ids = [int(item["memory_id"]) for item in memory_hits if item.get("memory_id") is not None]
+    memories = await list_memories_by_ids(memory_ids)
+    scores = {int(item["memory_id"]): float(item.get("score", 0)) for item in memory_hits}
+    for memory in memories:
+        memory["score"] = scores.get(memory["id"], 0)
+    return memories
+
+
 async def sync_enabled_memory_vectors(limit: int = 100) -> tuple[int, int]:
     memories = await list_memories(include_disabled=False, limit=limit)
     return await asyncio.to_thread(sync_memory_vectors, memories)

@@ -76,6 +76,10 @@ def search_memory_ids(query: str, limit: int = MEMORY_VECTOR_TOP_K) -> list[int]
 
 
 def search_memory_ids_by_vector(query_vector: list[float], limit: int = MEMORY_VECTOR_TOP_K) -> list[int]:
+    return [item["memory_id"] for item in search_memory_hits_by_vector(query_vector, limit)]
+
+
+def search_memory_hits_by_vector(query_vector: list[float], limit: int = MEMORY_VECTOR_TOP_K) -> list[dict]:
     ensure_memory_collection()
     results = get_milvus_client().search(
         collection_name=MILVUS_MEMORY_COLLECTION,
@@ -85,14 +89,17 @@ def search_memory_ids_by_vector(query_vector: list[float], limit: int = MEMORY_V
     )
     if not results:
         return []
-    ids = []
+    hits = []
     for hit in results[0]:
         memory_id = hit.get("id") or hit.get("memory_id")
         entity = hit.get("entity") or {}
         memory_id = entity.get("memory_id", memory_id)
         if memory_id is not None:
-            ids.append(int(memory_id))
-    return ids
+            hits.append({
+                "memory_id": int(memory_id),
+                "score": float(hit.get("distance", 0)),
+            })
+    return hits
 
 
 def sync_memory_vectors(memories: Iterable[dict]) -> tuple[int, int]:

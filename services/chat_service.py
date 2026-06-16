@@ -4,10 +4,10 @@ import re
 
 import httpx
 
-from configs import MEMORY_VECTOR_TOP_K, SEARCH_TOP_K, ZHIPU_CHAT_URL, LLM_MODEL, TEMPERATURE
+from configs import MEMORY_VECTOR_TOP_K, RERANK_MIN_SCORE, SEARCH_TOP_K, ZHIPU_CHAT_URL, LLM_MODEL, TEMPERATURE
 from core.embedding import embed_texts, generate_token
 from core.indexer import search, search_by_vector
-from core.memory_vector_store import search_memory_ids, search_memory_ids_by_vector
+from core.memory_vector_store import search_memory_hits_by_vector
 from core.memory import (
     count_user_messages,
     create_conversation,
@@ -25,7 +25,7 @@ from prompts.memory_prompts import (
 from prompts.rag_prompts import build_memory_system_prompt, build_rag_user_prompt
 from repositories.memory_repository import create_memory as save_long_term_memory
 from repositories.memory_repository import format_memories_text, get_enabled_memory_text, list_memories
-from repositories.memory_repository import list_memories_by_ids, memory_content_exists
+from repositories.memory_repository import list_memory_hits, memory_content_exists
 from repositories.memory_repository import update_memory as update_long_term_memory
 
 TITLE_MAX_CHARS = 18
@@ -53,47 +53,69 @@ MEMORY_TRIGGER_KEYWORDS = [
 
 def retrieve(query: str, app) -> tuple[str, list[str]]:
     candidates = search(app.state.index, app.state.documents, query, top_k=SEARCH_TOP_K)
-    reranked = app.state.reranker.rerank(query, candidates)
-    context = "\n".join([doc.page_content for doc in reranked])
-    sources = [doc.metadata.get("source", "") for doc in reranked]
-    return context, sources
+    return rerank_and_build_result(query, candidates, app)
 
 
 def retrieve_with_vector(query: str, query_vector: list[float], app) -> tuple[str, list[str]]:
     candidates = search_by_vector(app.state.index, app.state.documents, query_vector, top_k=SEARCH_TOP_K)
-    reranked = app.state.reranker.rerank(query, candidates)
-    context = "\n".join([doc.page_content for doc in reranked])
-    sources = [doc.metadata.get("source", "") for doc in reranked]
+    return rerank_and_build_result(query, candidates, app)
+
+
+def rerank_and_build_result(query: str, candidates: list, app) -> tuple[str, list[str]]:
+    try:
+        reranked = app.state.reranker.rerank(query, candidates)
+    except Exception as exc:
+        print(f"[Reranker] 知识库重排序失败，本轮不使用知识库上下文: {exc}")
+        return "", []
+    return build_retrieval_result(reranked)
+
+
+def build_retrieval_result(reranked_docs: list) -> tuple[str, list[str]]:
+    relevant_docs = [
+        doc for doc in reranked_docs if float(doc.metadata.get("relevance_score", 0)) >= RERANK_MIN_SCORE
+    ]
+    context = "\n".join([doc.page_content for doc in relevant_docs])
+    sources = []
+    for doc in relevant_docs:
+        source = doc.metadata.get("source", "")
+        if source and source not in sources:
+            sources.append(source)
     return context, sources
 
 
-async def get_relevant_memory_text(query: str) -> str:
+async def get_relevant_memories_with_vector(query_vector: list[float]) -> tuple[str, list[dict]]:
     try:
-        memory_ids = await asyncio.to_thread(search_memory_ids, query, MEMORY_VECTOR_TOP_K)
-        memories = await list_memories_by_ids(memory_ids)
+        memory_hits = await asyncio.to_thread(search_memory_hits_by_vector, query_vector, MEMORY_VECTOR_TOP_K)
+        memories = await list_memory_hits(memory_hits)
         if memories:
-            return format_memories_text(memories)
-        return ""
+            return format_memories_text(memories), memories
+        return "", []
     except Exception as exc:
         print(f"[Milvus] 长期记忆向量检索失败，回退到默认记忆读取: {exc}")
-        return await get_enabled_memory_text()
-
-
-async def get_relevant_memory_text_with_vector(query_vector: list[float]) -> str:
-    try:
-        memory_ids = await asyncio.to_thread(search_memory_ids_by_vector, query_vector, MEMORY_VECTOR_TOP_K)
-        memories = await list_memories_by_ids(memory_ids)
-        if memories:
-            return format_memories_text(memories)
-        return ""
-    except Exception as exc:
-        print(f"[Milvus] 长期记忆向量检索失败，回退到默认记忆读取: {exc}")
-        return await get_enabled_memory_text()
+        return await get_enabled_memory_text(), []
 
 
 async def embed_query(query: str) -> list[float]:
     vectors = await asyncio.to_thread(embed_texts, [query])
     return vectors[0]
+
+
+async def prepare_memory_chat_context(query: str, app) -> tuple[str, list[str], str, list[dict]]:
+    try:
+        query_vector = await embed_query(query)
+    except Exception as exc:
+        print(f"[Embedding] query 向量生成失败，回退到普通知识库检索: {exc}")
+        context, sources = retrieve(query, app)
+        long_term_memory = await get_enabled_memory_text()
+        return context, sources, long_term_memory, []
+
+    try:
+        context, sources = retrieve_with_vector(query, query_vector, app)
+    except Exception as exc:
+        print(f"[FAISS] 知识库向量检索失败，本轮不使用知识库上下文: {exc}")
+        context, sources = "", []
+    long_term_memory, used_memories = await get_relevant_memories_with_vector(query_vector)
+    return context, sources, long_term_memory, used_memories
 
 
 def trim_title(title: str, max_chars: int = TITLE_MAX_CHARS) -> str:
@@ -376,8 +398,7 @@ def chat_once(app, query: str) -> dict:
 async def chat_with_memory(app, query: str, conversation_id: str = "", history_len: int = 10) -> dict:
     cid = conversation_id or await create_conversation()
     history = await get_history(cid, history_len)
-    context, sources = retrieve(query, app)
-    long_term_memory = await get_relevant_memory_text(query)
+    context, sources, long_term_memory, used_memories = await prepare_memory_chat_context(query, app)
     messages = build_memory_messages(query, history, context, long_term_memory)
     data = {"model": LLM_MODEL, "messages": messages, "temperature": TEMPERATURE, "stream": False}
 
@@ -390,7 +411,13 @@ async def chat_with_memory(app, query: str, conversation_id: str = "", history_l
     await save_message(cid, "assistant", answer)
     title = await maybe_set_first_turn_title(cid, history, query, answer)
     await maybe_extract_and_save_long_term_memories(query, answer, cid)
-    return {"answer": answer, "sources": sources, "conversation_id": cid, "title": title}
+    return {
+        "answer": answer,
+        "sources": sources,
+        "conversation_id": cid,
+        "title": title,
+        "used_memories": used_memories,
+    }
 
 
 def build_memory_messages(query: str, history: list, context: str, long_term_memory: str = "") -> list[dict]:
@@ -404,9 +431,12 @@ async def stream_chat_with_memory(app, query: str, conversation_id: str = "", hi
     cid = conversation_id or await create_conversation()
     # 查短期记忆
     history = await get_history(cid, history_len)
-    context, sources = retrieve(query, app)
-    # 查长期记忆
-    long_term_memory = await get_relevant_memory_text(query)
+    # 复用同一个 query embedding：同时检索知识库和长期记忆。
+    # context：知识库检索内容
+    # sources：知识库来源
+    # long_term_memory：要放进 system prompt 的长期记忆文本
+    # used_memories：本轮命中的长期记忆列表，用于前端展示
+    context, sources, long_term_memory, used_memories = await prepare_memory_chat_context(query, app)
     messages = build_memory_messages(query, history, context, long_term_memory)
     data = {"model": LLM_MODEL, "messages": messages, "temperature": TEMPERATURE, "stream": True}
 
@@ -433,5 +463,10 @@ async def stream_chat_with_memory(app, query: str, conversation_id: str = "", hi
     title = await maybe_set_first_turn_title(cid, history, query, full_text)
     # 自动提取长期记忆：规则触发提取当前轮，定期触发总结最近几轮。
     await maybe_extract_and_save_long_term_memories(query, full_text, cid)
-    done = {"sources": sources, "conversation_id": cid, "title": title}
+    done = {
+        "sources": sources,
+        "conversation_id": cid,
+        "title": title,
+        "used_memories": used_memories,
+    }
     yield {"event": "done", "data": json.dumps(done, ensure_ascii=False)}

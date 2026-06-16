@@ -16,6 +16,7 @@ class ChatResponse(BaseModel):
     sources: list[str]
     conversation_id: str = ""
     title: str = ""
+    used_memories: list[dict] = []
 
 
 class NewConvResponse(BaseModel):
