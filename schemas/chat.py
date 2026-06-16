@@ -9,6 +9,7 @@ class MemoryChatRequest(BaseModel):
     query: str
     conversation_id: str = ""
     history_len: int = 10
+    enable_web_search: bool = False
 
 
 class ChatResponse(BaseModel):
@@ -17,6 +18,7 @@ class ChatResponse(BaseModel):
     conversation_id: str = ""
     title: str = ""
     used_memories: list[dict] = []
+    web_sources: list[dict] = []
 
 
 class NewConvResponse(BaseModel):

@@ -27,6 +27,7 @@ from repositories.memory_repository import create_memory as save_long_term_memor
 from repositories.memory_repository import format_memories_text, get_enabled_memory_text, list_memories
 from repositories.memory_repository import list_memory_hits, memory_content_exists
 from repositories.memory_repository import update_memory as update_long_term_memory
+from services.mcp_search_service import search_web_with_mcp
 
 TITLE_MAX_CHARS = 18
 ALLOWED_MEMORY_CATEGORIES = {"profile", "preference", "project", "goal", "fact", "general"}
@@ -100,14 +101,19 @@ async def embed_query(query: str) -> list[float]:
     return vectors[0]
 
 
-async def prepare_memory_chat_context(query: str, app) -> tuple[str, list[str], str, list[dict]]:
+async def prepare_memory_chat_context(
+    query: str,
+    app,
+    enable_web_search: bool = False,
+) -> tuple[str, list[str], str, list[dict], str, list[dict]]:
     try:
         query_vector = await embed_query(query)
     except Exception as exc:
         print(f"[Embedding] query 向量生成失败，回退到普通知识库检索: {exc}")
         context, sources = retrieve(query, app)
         long_term_memory = await get_enabled_memory_text()
-        return context, sources, long_term_memory, []
+        web_context, web_sources = await maybe_search_web(query, enable_web_search)
+        return context, sources, long_term_memory, [], web_context, web_sources
 
     try:
         context, sources = retrieve_with_vector(query, query_vector, app)
@@ -115,7 +121,14 @@ async def prepare_memory_chat_context(query: str, app) -> tuple[str, list[str], 
         print(f"[FAISS] 知识库向量检索失败，本轮不使用知识库上下文: {exc}")
         context, sources = "", []
     long_term_memory, used_memories = await get_relevant_memories_with_vector(query_vector)
-    return context, sources, long_term_memory, used_memories
+    web_context, web_sources = await maybe_search_web(query, enable_web_search)
+    return context, sources, long_term_memory, used_memories, web_context, web_sources
+
+
+async def maybe_search_web(query: str, enable_web_search: bool) -> tuple[str, list[dict]]:
+    if not enable_web_search:
+        return "", []
+    return await search_web_with_mcp(query, limit=3)
 
 
 def trim_title(title: str, max_chars: int = TITLE_MAX_CHARS) -> str:
@@ -395,11 +408,21 @@ def chat_once(app, query: str) -> dict:
     return {"answer": answer, "sources": sources}
 
 
-async def chat_with_memory(app, query: str, conversation_id: str = "", history_len: int = 10) -> dict:
+async def chat_with_memory(
+    app,
+    query: str,
+    conversation_id: str = "",
+    history_len: int = 10,
+    enable_web_search: bool = False,
+) -> dict:
     cid = conversation_id or await create_conversation()
     history = await get_history(cid, history_len)
-    context, sources, long_term_memory, used_memories = await prepare_memory_chat_context(query, app)
-    messages = build_memory_messages(query, history, context, long_term_memory)
+    context, sources, long_term_memory, used_memories, web_context, web_sources = await prepare_memory_chat_context(
+        query,
+        app,
+        enable_web_search,
+    )
+    messages = build_memory_messages(query, history, context, long_term_memory, web_context)
     data = {"model": LLM_MODEL, "messages": messages, "temperature": TEMPERATURE, "stream": False}
 
     with httpx.Client(timeout=60) as client:
@@ -417,17 +440,30 @@ async def chat_with_memory(app, query: str, conversation_id: str = "", history_l
         "conversation_id": cid,
         "title": title,
         "used_memories": used_memories,
+        "web_sources": web_sources,
     }
 
 
-def build_memory_messages(query: str, history: list, context: str, long_term_memory: str = "") -> list[dict]:
-    messages = [{"role": "system", "content": build_memory_system_prompt(context, long_term_memory)}]
+def build_memory_messages(
+    query: str,
+    history: list,
+    context: str,
+    long_term_memory: str = "",
+    web_context: str = "",
+) -> list[dict]:
+    messages = [{"role": "system", "content": build_memory_system_prompt(context, long_term_memory, web_context)}]
     messages += [{"role": item["role"], "content": item["content"]} for item in history]
     messages.append({"role": "user", "content": query})
     return messages
 
 
-async def stream_chat_with_memory(app, query: str, conversation_id: str = "", history_len: int = 10):
+async def stream_chat_with_memory(
+    app,
+    query: str,
+    conversation_id: str = "",
+    history_len: int = 10,
+    enable_web_search: bool = False,
+):
     cid = conversation_id or await create_conversation()
     # 查短期记忆
     history = await get_history(cid, history_len)
@@ -436,8 +472,12 @@ async def stream_chat_with_memory(app, query: str, conversation_id: str = "", hi
     # sources：知识库来源
     # long_term_memory：要放进 system prompt 的长期记忆文本
     # used_memories：本轮命中的长期记忆列表，用于前端展示
-    context, sources, long_term_memory, used_memories = await prepare_memory_chat_context(query, app)
-    messages = build_memory_messages(query, history, context, long_term_memory)
+    context, sources, long_term_memory, used_memories, web_context, web_sources = await prepare_memory_chat_context(
+        query,
+        app,
+        enable_web_search,
+    )
+    messages = build_memory_messages(query, history, context, long_term_memory, web_context)
     data = {"model": LLM_MODEL, "messages": messages, "temperature": TEMPERATURE, "stream": True}
 
     full_text = ""
@@ -468,5 +508,6 @@ async def stream_chat_with_memory(app, query: str, conversation_id: str = "", hi
         "conversation_id": cid,
         "title": title,
         "used_memories": used_memories,
+        "web_sources": web_sources,
     }
     yield {"event": "done", "data": json.dumps(done, ensure_ascii=False)}

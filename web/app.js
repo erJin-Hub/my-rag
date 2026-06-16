@@ -18,6 +18,8 @@ const els = {
   messages: document.querySelector("#messages"),
   sources: document.querySelector("#sources"),
   usedMemories: document.querySelector("#usedMemories"),
+  webSources: document.querySelector("#webSources"),
+  webSearchToggle: document.querySelector("#webSearchToggle"),
   chatForm: document.querySelector("#chatForm"),
   queryInput: document.querySelector("#queryInput"),
   sendButton: document.querySelector("#sendButton"),
@@ -250,6 +252,7 @@ function renderEmptyState() {
   els.currentMeta.textContent = "还没有选择会话";
   els.sources.textContent = "";
   renderUsedMemories([]);
+  renderWebSources([]);
 }
 
 function setActiveConversation(conversationId, title) {
@@ -355,6 +358,7 @@ async function sendMessage(query) {
   els.queryInput.value = "";
   els.sources.textContent = "";
   renderUsedMemories([]);
+  renderWebSources([]);
 
   appendMessage("user", query);
   const assistantNode = appendMessage("assistant", "");
@@ -363,7 +367,7 @@ async function sendMessage(query) {
     await streamChat(query, assistantNode);
   } catch (error) {
     assistantNode.classList.add("error");
-    assistantNode.textContent = error.message;
+    setMessageText(assistantNode, error.message);
   } finally {
     state.sending = false;
     els.sendButton.disabled = false;
@@ -376,6 +380,7 @@ async function streamChat(query, assistantNode) {
     query,
     conversation_id: state.conversationId,
     history_len: 10,
+    enable_web_search: els.webSearchToggle.checked,
   };
 
   const response = await fetch("/api/chat/memory/stream", {
@@ -435,7 +440,7 @@ function handleSseEvent(rawEvent, assistantNode, query) {
   }
 
   if (event.event === "token") {
-    assistantNode.textContent += event.data.token || "";
+    setMessageText(assistantNode, getMessageText(assistantNode) + (event.data.token || ""));
     scrollMessagesToBottom();
     return;
   }
@@ -455,6 +460,11 @@ function handleSseEvent(rawEvent, assistantNode, query) {
     }
     renderSources(event.data.sources || []);
     renderUsedMemories(event.data.used_memories || []);
+    const webSources = event.data.web_sources || [];
+    if (webSources.length) {
+      enableMessageCitations(assistantNode, webSources.length);
+    }
+    renderWebSources(webSources, assistantNode);
     return;
   }
 
@@ -541,6 +551,51 @@ function renderUsedMemories(memories) {
   els.usedMemories.appendChild(list);
 }
 
+function renderWebSources(sources, targetNode = null) {
+  if (!targetNode) {
+    els.webSources.innerHTML = "";
+  }
+  if (!sources.length) {
+    return;
+  }
+
+  const container = targetNode || els.webSources;
+  const header = document.createElement("div");
+  header.className = targetNode ? "message-source-summary" : "used-memory-title";
+  header.textContent = targetNode ? `检索到 ${sources.length} 个网页` : `联网搜索来源 ${sources.length} 条`;
+  container.appendChild(header);
+
+  const list = document.createElement("div");
+  list.className = targetNode ? "message-source-list" : "web-source-list";
+  sources.forEach((source, index) => {
+    const item = document.createElement("a");
+    item.className = targetNode ? "message-source-card" : "web-source-item";
+    item.href = source.url || "#";
+    item.target = "_blank";
+    item.rel = "noreferrer";
+
+    const badge = document.createElement("span");
+    badge.className = "message-source-index";
+    badge.textContent = String(index + 1);
+
+    const title = document.createElement("div");
+    title.className = targetNode ? "message-source-title" : "web-source-title";
+    title.textContent = compactText(source.title || source.url || "搜索结果", targetNode ? 38 : 80);
+
+    const snippet = document.createElement("div");
+    snippet.className = targetNode ? "message-source-snippet" : "web-source-snippet";
+    snippet.textContent = compactText(source.snippet || "", targetNode ? 90 : 180);
+
+    item.appendChild(badge);
+    item.appendChild(title);
+    if (snippet.textContent) {
+      item.appendChild(snippet);
+    }
+    list.appendChild(item);
+  });
+  container.appendChild(list);
+}
+
 function formatMemoryCategory(category) {
   const labels = {
     preference: "偏好",
@@ -557,10 +612,68 @@ function formatMemoryCategory(category) {
 function appendMessage(role, text) {
   const node = document.createElement("div");
   node.className = `message ${role}`;
-  node.textContent = text;
+  const body = document.createElement("div");
+  body.className = "message-body";
+  node.appendChild(body);
+  setMessageText(node, text);
   els.messages.appendChild(node);
   scrollMessagesToBottom();
   return node;
+}
+
+function getMessageBody(node) {
+  return node.querySelector(".message-body") || node;
+}
+
+function getMessageText(node) {
+  return getMessageBody(node).dataset.rawText || "";
+}
+
+function setMessageText(node, text) {
+  const body = getMessageBody(node);
+  body.dataset.rawText = text || "";
+  renderMessageText(body, text || "", node.dataset.showCitations === "true");
+}
+
+function enableMessageCitations(node, citationCount) {
+  node.dataset.showCitations = "true";
+  node.dataset.citationCount = String(citationCount || 0);
+  setMessageText(node, getMessageText(node));
+}
+
+function renderMessageText(body, text, enableCitations) {
+  body.innerHTML = "";
+  if (!enableCitations) {
+    body.textContent = text;
+    return;
+  }
+
+  const parts = String(text).split(/(\[\d+\])/g);
+  const citationCount = Number(body.parentElement?.dataset.citationCount || 0);
+  for (const part of parts) {
+    const match = part.match(/^\[(\d+)\]$/);
+    const citationNumber = match ? Number(match[1]) : 0;
+    if (match && citationNumber > 0 && citationNumber <= citationCount) {
+      const marker = document.createElement("sup");
+      marker.className = "citation-marker";
+      marker.textContent = match[1];
+      body.appendChild(marker);
+    } else {
+      body.appendChild(document.createTextNode(part));
+    }
+  }
+}
+
+function compactText(text, maxLength) {
+  const normalized = String(text || "")
+    .replace(/!\[[^\]]*]\([^)]+\)/g, "")
+    .replace(/\[[^\]]+]\([^)]+\)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxLength).trim()}...`;
 }
 
 function scrollMessagesToBottom() {

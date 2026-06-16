@@ -22,3 +22,10 @@ MYSQL_DATABASE = get_env("MYSQL_DATABASE", "my_rag")
 # ---- Milvus ----
 MILVUS_URI = get_env("MILVUS_URI", "http://127.0.0.1:19530")
 MILVUS_MEMORY_COLLECTION = get_env("MILVUS_MEMORY_COLLECTION", "long_term_memories")
+
+# ---- MCP Web Search ----
+MCP_SEARCH_COMMAND = get_env("MCP_SEARCH_COMMAND", "python")
+MCP_SEARCH_SCRIPT = get_env("MCP_SEARCH_SCRIPT", "mcp_servers/web_search_server.py")
+MCP_SEARCH_TOOL = get_env("MCP_SEARCH_TOOL", "web_search")
+TAVILY_API_KEY = get_env("TAVILY_API_KEY")
+TAVILY_SEARCH_URL = get_env("TAVILY_SEARCH_URL", "https://api.tavily.com/search")

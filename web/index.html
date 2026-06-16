@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>my-rag 工作台</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260614-1">
+    <link rel="stylesheet" href="/static/styles.css?v=20260616-2">
   </head>
   <body>
     <div class="shell">
@@ -47,15 +47,20 @@
 
         <footer class="composer">
           <div id="usedMemories" class="used-memories"></div>
+          <div id="webSources" class="web-sources"></div>
           <div id="sources" class="sources"></div>
           <form id="chatForm" class="chat-form">
             <textarea id="queryInput" rows="2" placeholder="输入你的问题"></textarea>
+            <label class="search-toggle">
+              <input id="webSearchToggle" type="checkbox">
+              <span>联网搜索</span>
+            </label>
             <button id="sendButton" class="send-button" type="submit">发送</button>
           </form>
         </footer>
       </main>
     </div>
 
-    <script src="/static/app.js?v=20260614-1"></script>
+    <script src="/static/app.js?v=20260616-2"></script>
   </body>
 </html>

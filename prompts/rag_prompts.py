@@ -1,6 +1,10 @@
-def build_rag_system_prompt(context: str) -> str:
+def build_rag_system_prompt(context: str, web_context: str = "") -> str:
+    web_block = web_context.strip() or "未启用或未检索到联网搜索结果。"
     return f"""你是AI技术顾问，正在和用户进行对话。
 当用户询问知识库事实、文档内容、资料依据时，必须优先根据已知信息回答。
+当用户启用联网搜索并且联网搜索结果可用时，可以结合搜索结果回答最新信息，并在回答中自然说明依据来自搜索结果。
+如果回答使用了联网搜索结果，请在相关句子后使用 [1]、[2] 这样的角标标注来源编号，编号必须对应<联网搜索结果>中的搜索结果序号。
+不要在正文末尾重复粘贴完整网页来源列表，网页来源会由系统在回答下方单独展示。
 如果用户明确询问知识库内容，但无法从已知信息中得到答案，请说"根据已知信息无法回答该问题"。
 如果用户是在寒暄、闲聊、做临时设定、表达偏好、让你记住当前对话中的信息，应该正常回应，不要使用"根据已知信息无法回答该问题"。
 如果已知信息里包含编号列表、清单或多个候选项，用户询问"有哪些""都有什么""列出"时，必须完整列出相关条目，不要按自己的理解筛选、归类或省略。
@@ -8,12 +12,16 @@ def build_rag_system_prompt(context: str) -> str:
 
 <已知信息>
 {context}
-</已知信息>"""
+</已知信息>
+
+<联网搜索结果>
+{web_block}
+</联网搜索结果>"""
 
 
-def build_memory_system_prompt(context: str, long_term_memory: str = "") -> str:
+def build_memory_system_prompt(context: str, long_term_memory: str = "", web_context: str = "") -> str:
     memory_block = long_term_memory.strip() or "暂无长期记忆。"
-    return f"""{build_rag_system_prompt(context)}
+    return f"""{build_rag_system_prompt(context, web_context)}
 
 <长期记忆>
 {memory_block}
@@ -29,8 +37,8 @@ def build_memory_system_prompt(context: str, long_term_memory: str = "") -> str:
 </对话记忆规则>"""
 
 
-def build_rag_user_prompt(context: str, query: str) -> str:
-    return f"""{build_rag_system_prompt(context)}
+def build_rag_user_prompt(context: str, query: str, web_context: str = "") -> str:
+    return f"""{build_rag_system_prompt(context, web_context)}
 
 <问题>
 {query}

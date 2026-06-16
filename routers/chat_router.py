@@ -19,6 +19,7 @@ async def chat_memory(request: Request, body: MemoryChatRequest):
         body.query,
         body.conversation_id,
         body.history_len,
+        body.enable_web_search,
     )
     return ChatResponse(**result)
 
@@ -31,5 +32,6 @@ async def chat_memory_stream(request: Request, body: MemoryChatRequest):
             body.query,
             body.conversation_id,
             body.history_len,
+            body.enable_web_search,
         )
     )
