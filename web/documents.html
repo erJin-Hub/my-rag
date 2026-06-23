@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>知识库 - my-rag</title>
+    <link rel="stylesheet" href="/static/styles.css?v=20260614-1">
+  </head>
+  <body>
+    <div class="documents-shell">
+      <header class="documents-topbar">
+        <div>
+          <div class="kicker">KNOWLEDGE BASE</div>
+          <div class="brand-title">知识库</div>
+          <div id="docSummary" class="page-meta">正在读取文档</div>
+        </div>
+        <nav class="top-nav" aria-label="主导航">
+          <a class="ghost-link" href="/">对话</a>
+          <a class="ghost-link active" href="/documents">知识库</a>
+          <a class="ghost-link" href="/memories">长期记忆</a>
+        </nav>
+      </header>
+
+      <main class="documents-main">
+        <section class="upload-panel">
+          <div class="upload-head">
+            <div>
+              <h1 class="panel-title">文档入库</h1>
+              <div class="page-meta">支持 .txt / .md / .pdf / .docx，上传后立即追加到当前 FAISS 索引</div>
+            </div>
+            <input id="fileInput" type="file" accept=".txt,.md,.pdf,.docx" multiple hidden>
+            <button id="uploadButton" class="primary-button compact-button" type="button">选择文件</button>
+          </div>
+
+          <div id="dropZone" class="drop-zone" tabindex="0">
+            <div class="drop-title">拖拽文档到这里</div>
+            <div class="page-meta">也可以点击右上角选择文件</div>
+          </div>
+
+          <div id="uploadStatus" class="upload-status"></div>
+        </section>
+
+        <section class="document-panel">
+          <div class="panel-row">
+            <h2 class="panel-title">已入库文档</h2>
+            <button id="refreshDocsButton" class="ghost-button" type="button">刷新</button>
+          </div>
+          <div id="docList" class="document-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/documents.js?v=20260614-1"></script>
+  </body>
+</html>
